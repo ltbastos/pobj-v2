@@ -20,6 +20,7 @@ const AGENT_ENDPOINT = "/api/agent"; // seu endpoint (se usar http)
 const $  = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const fmtBRL = new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" });
+const fmtBRLCompact = new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL", notation:"compact", maximumFractionDigits:1 });
 const fmtINT = new Intl.NumberFormat("pt-BR");
 
 /* ===== Ajusta altura conforme topbar (svh) ===== */
@@ -118,12 +119,31 @@ function formatByMetric(metric, value){
   if(metric === "qtd")  return fmtINT.format(Math.round(value));
   return fmtBRL.format(Math.round(value));
 }
+function formatCompactBRL(value){
+  const v = Number.isFinite(value) ? Math.round(value) : 0;
+  try {
+    return fmtBRLCompact.format(v);
+  } catch(_) {
+    return fmtBRL.format(v);
+  }
+}
 function makeRandomForMetric(metric){
-  if(metric === "perc"){ const meta=100; const realizado=Math.round(45+Math.random()*75); return { meta, realizado }; }
-  if(metric === "qtd"){ const meta=Math.round(1_000+Math.random()*19_000); const realizado=Math.round(meta*(0.75+Math.random()*0.6)); return { meta, realizado }; }
-  const meta=Math.round(4_000_000+Math.random()*16_000_000);
-  const realizado=Math.round(meta*(0.75+Math.random()*0.6));
-  return { meta, realizado };
+  if(metric === "perc"){
+    const meta = 100;
+    const realizado = Math.round(45 + Math.random()*75);
+    const variavelMeta = Math.round(160_000 + Math.random()*180_000);
+    return { meta, realizado, variavelMeta };
+  }
+  if(metric === "qtd"){
+    const meta = Math.round(1_000 + Math.random()*19_000);
+    const realizado = Math.round(meta * (0.75 + Math.random()*0.6));
+    const variavelMeta = Math.round(150_000 + Math.random()*220_000);
+    return { meta, realizado, variavelMeta };
+  }
+  const meta = Math.round(4_000_000 + Math.random()*16_000_000);
+  const realizado = Math.round(meta * (0.75 + Math.random()*0.6));
+  const variavelMeta = Math.round(320_000 + Math.random()*420_000);
+  return { meta, realizado, variavelMeta };
 }
 
 /* ===== API / MOCK ===== */
@@ -139,12 +159,32 @@ async function getData(){
   const hoje = new Date();
   const sections = CARD_SECTIONS_DEF.map(sec=>{
     const items = sec.items.map(it=>{
-      const { meta, realizado } = makeRandomForMetric(it.metric);
-      const ating = it.metric==="perc" ? (realizado/100) : (meta? realizado/meta : 0);
-      return { ...it, meta, realizado, ating, atingido: ating>=1, ultimaAtualizacao: hoje.toLocaleDateString("pt-BR") };
+      const { meta, realizado, variavelMeta } = makeRandomForMetric(it.metric);
+      const ating = it.metric==="perc" ? (realizado/100) : (meta ? realizado/meta : 0);
+      const variavelReal = Math.max(0, Math.round((variavelMeta || 0) * ating));
+      const atingVariavel = variavelMeta ? (variavelReal / variavelMeta) : ating;
+      return {
+        ...it,
+        meta,
+        realizado,
+        variavelMeta,
+        variavelReal,
+        ating,
+        atingVariavel,
+        atingido: ating>=1,
+        ultimaAtualizacao: hoje.toLocaleDateString("pt-BR")
+      };
     });
     return { id:sec.id, label:sec.label, items };
   });
+
+  const totalsVar = sections.reduce((acc, sec)=>{
+    sec.items.forEach(item => {
+      acc.possivel += item.variavelMeta || 0;
+      acc.atingido += item.variavelReal || 0;
+    });
+    return acc;
+  }, { possivel:0, atingido:0 });
 
   const allItems = sections.flatMap(s => s.items);
   const indicadoresTotal = allItems.length;
@@ -157,6 +197,9 @@ async function getData(){
   const segs  = ["Empresas","Negócios","MEI"];
   const prodIds = [...PRODUCT_INDEX.keys()];
   const famsMacro = ["Crédito","Investimentos","Seguros","Consórcios","Previdência","Cartão de crédito"];
+  const canaisVenda = ["Agência física","Digital","Correspondente","APP Empresas"];
+  const tiposVenda = ["Venda consultiva","Venda direta","Cross-sell","Pós-venda"];
+  const modalidadesVenda = ["À vista","Parcelado"];
 
   const ranking = Array.from({length:140}, (_,i)=>{
     const produtoId = prodIds[i % prodIds.length];
@@ -171,6 +214,10 @@ async function getData(){
     const meta_acum = Math.round(meta_mens * fator);
     const real_acum = Math.round(real_mens * fator);
 
+    const canalVenda = canaisVenda[Math.floor(Math.random()*canaisVenda.length)];
+    const tipoVenda = tiposVenda[Math.floor(Math.random()*tiposVenda.length)];
+    const modalidadePagamento = modalidadesVenda[Math.floor(Math.random()*modalidadesVenda.length)];
+
     return {
       diretoria: dres[i % dres.length],
       gerenciaRegional: grs[i % grs.length],
@@ -183,6 +230,9 @@ async function getData(){
       gerente: `Gerente ${1+(i%16)}`,
       agencia: `Ag ${1000+i}`,
       segmento: segs[i % segs.length],
+      canalVenda,
+      tipoVenda,
+      modalidadePagamento,
       realizado: real_mens,
       meta:      meta_mens,
       qtd:       Math.round(50 + Math.random()*1950),
@@ -200,7 +250,10 @@ async function getData(){
       indicadoresPct: indicadoresTotal ? indicadoresAtingidos/indicadoresTotal : 0,
       pontosPossiveis,
       pontosAtingidos,
-      pontosPct: pontosPossiveis ? pontosAtingidos/pontosPossiveis : 0
+      pontosPct: pontosPossiveis ? pontosAtingidos/pontosPossiveis : 0,
+      varPossivel: totalsVar.possivel,
+      varAtingido: totalsVar.atingido,
+      varPct: totalsVar.possivel ? (totalsVar.atingido / totalsVar.possivel) : 0
     },
     ranking,
     period
@@ -752,7 +805,24 @@ function ensureContracts(r) {
     const valor = Math.round((r.realizado / n) * (0.6 + Math.random() * 0.9)),
           meta  = Math.round((r.meta       / n) * (0.6 + Math.random() * 0.9));
     const sp = r.subproduto || r.produto;
-    arr.push({ id, produto: r.produto, subproduto: r.subproduto || "", prodOrSub: sp, qtd: 1, realizado: valor, meta, ating: meta ? (valor / meta) : 0, data: r.data, tipo: Math.random() > .5 ? "Venda direta" : "Digital" });
+    const canalVenda = r.canalVenda || (Math.random() > .5 ? "Agência física" : "Digital");
+    const tipoVenda = r.tipoVenda || (Math.random() > .5 ? "Venda consultiva" : "Venda direta");
+    const modalidadePagamento = r.modalidadePagamento || (Math.random() > .5 ? "À vista" : "Parcelado");
+    arr.push({
+      id,
+      produto: r.produto,
+      subproduto: r.subproduto || "",
+      prodOrSub: sp,
+      qtd: 1,
+      realizado: valor,
+      meta,
+      ating: meta ? (valor / meta) : 0,
+      data: r.data,
+      canalVenda,
+      tipoVenda,
+      modalidadePagamento,
+      gerente: r.gerente
+    });
   }
   r._contracts = arr; return arr;
 }
@@ -773,6 +843,35 @@ function buildTree(list, startKey) {
     return { realizado, meta, qtd, ating: meta? realizado/meta : 0, data };
   }
 
+  function buildDetailGroups(arr){
+    const map = new Map();
+    arr.forEach(r => {
+      const canal = r.canalVenda || "Canal não informado";
+      const tipo = r.tipoVenda || "Tipo não informado";
+      const gerente = r.gerente || "—";
+      const modalidade = r.modalidadePagamento || (r.subproduto || "Modalidade não informada");
+      const key = `${canal}|${tipo}|${gerente}|${modalidade}`;
+      const bucket = map.get(key) || [];
+      bucket.push(r);
+      map.set(key, bucket);
+    });
+    return [...map.entries()].map(([comboKey, subset]) => {
+      const [canal, tipo, gerente, modalidade] = comboKey.split("|");
+      const a = agg(subset);
+      return {
+        canal,
+        tipo,
+        gerente,
+        modalidade,
+        realizado: a.realizado,
+        meta: a.meta,
+        qtd: a.qtd,
+        ating: a.ating,
+        data: a.data
+      };
+    }).sort((a,b)=> (b.realizado||0) - (a.realizado||0));
+  }
+
   function buildLevel(arr, levelKey, level){
     if (levelKey === "contrato") {
       return arr.flatMap(r => ensureContracts(r).map(c => ({
@@ -786,11 +885,40 @@ function buildTree(list, startKey) {
       const a = agg(subset), next = NEXT[levelKey];
       return {
         type:"grupo", level, label:k, realizado:a.realizado, meta:a.meta, qtd:a.qtd, ating:a.ating, data:a.data,
-        breadcrumb:[k], children: next ? buildLevel(subset, next, level+1) : []
+        breadcrumb:[k], detailGroups: levelKey === "prodsub" ? buildDetailGroups(subset) : [],
+        children: next ? buildLevel(subset, next, level+1) : []
       };
     });
   }
   return buildLevel(list, startKey, 0);
+}
+
+function updateContractAutocomplete(){
+  const input = document.getElementById("busca");
+  if (!input) return;
+  let listId = input.getAttribute("list");
+  if (!listId){
+    listId = "contract-suggestions";
+    input.setAttribute("list", listId);
+  }
+  let datalist = document.getElementById(listId);
+  if (!datalist){
+    datalist = document.createElement("datalist");
+    datalist.id = listId;
+    input.insertAdjacentElement("afterend", datalist);
+  }
+
+  const suggestions = new Set();
+  const limit = 150;
+  (state._rankingRaw || []).forEach(row => {
+    ensureContracts(row).forEach(contract => {
+      if (!suggestions.has(contract.id) && suggestions.size < limit) {
+        suggestions.add(contract.id);
+      }
+    });
+  });
+
+  datalist.innerHTML = [...suggestions].sort().map(id => `<option value="${id}"></option>`).join("");
 }
 
 /* ===== UI ===== */
@@ -855,6 +983,7 @@ function bindEvents() {
       if (view === "table") switchView("table");
       else if (view === "ranking") switchView("ranking");
       else if (view === "exec") switchView("exec");
+      else if (view === "campanhas") switchView("campanhas");
       else switchView("cards");
     });
   });
@@ -1083,13 +1212,14 @@ function ensureChatWidget(){
 /* ===== Troca de view (com spinner) ===== */
 async function switchView(next) {
   const label =
-    next === "table"   ? "Montando detalhamento…" :
-    next === "ranking" ? "Calculando ranking…"    :
-    next === "exec"    ? "Abrindo visão executiva…" :
-                         "Carregando…";
+    next === "table"     ? "Montando detalhamento…" :
+    next === "ranking"   ? "Calculando ranking…"    :
+    next === "exec"      ? "Abrindo visão executiva…" :
+    next === "campanhas" ? "Abrindo campanhas…" :
+                           "Carregando…";
 
   await withSpinner(async () => {
-    const views = { cards:"#view-cards", table:"#view-table", ranking:"#view-ranking", exec:"#view-exec" };
+    const views = { cards:"#view-cards", table:"#view-table", ranking:"#view-ranking", exec:"#view-exec", campanhas:"#view-campanhas" };
 
     if (next === "ranking" && !$("#view-ranking")) createRankingView();
     if (next === "exec") createExecutiveView();
@@ -1119,7 +1249,7 @@ async function switchView(next) {
 
 /* ===== Resumo (Indicadores / Pontos) ===== */
 function hitbarClass(p){ return p<50 ? "hitbar--low" : (p<100 ? "hitbar--warn" : "hitbar--ok"); }
-function renderResumoKPI(summary, visibleItemsHitCount, visiblePointsHit) {
+function renderResumoKPI(summary, visibleItemsHitCount, visiblePointsHit, visibleVarAtingido, visibleVarMeta) {
   let kpi = $("#kpi-summary");
   if (!kpi) {
     kpi = document.createElement("div");
@@ -1136,13 +1266,19 @@ function renderResumoKPI(summary, visibleItemsHitCount, visiblePointsHit) {
     ? (visiblePointsHit / summary.pontosPossiveis)
     : (summary.pontosPct || 0);
 
-  const varPossivel = (summary.varPossivel != null)
-    ? summary.varPossivel
-    : Math.round((summary.pontosPossiveis || 0) * 1000);
+  const hasVisibleVar = (visibleVarMeta != null) && (visibleVarAtingido != null);
 
-  const varAtingido = (summary.varAtingido != null)
-    ? summary.varAtingido
-    : Math.round(varPossivel * pctPts);
+  const varPossivel = hasVisibleVar
+    ? visibleVarMeta
+    : (summary.varPossivel != null
+        ? summary.varPossivel
+        : Math.round((summary.pontosPossiveis || 0) * 1000));
+
+  const varAtingido = hasVisibleVar
+    ? visibleVarAtingido
+    : (summary.varAtingido != null
+        ? summary.varAtingido
+        : Math.round(varPossivel * pctPts));
 
   const pctVar = varPossivel ? (varAtingido / varPossivel) : 0;
 
@@ -1271,6 +1407,9 @@ function renderFamilias(sections, summary){
 
   let atingidosVisiveis = 0;
   let pontosAtingidosVisiveis = 0;
+  let varRealVisiveis = 0;
+  let varMetaVisiveis = 0;
+  let hasVisibleVar = false;
 
   const kpiHolder = document.createElement("div");
   kpiHolder.id = "kpi-summary";
@@ -1292,6 +1431,8 @@ function renderFamilias(sections, summary){
 
     const sectionTotalPoints = sec.items.reduce((acc,i)=> acc + (i.peso||0), 0);
     const sectionPointsHit   = sec.items.filter(i=> i.atingido).reduce((acc,i)=> acc + (i.peso||0), 0);
+    const sectionVarMeta     = sec.items.reduce((acc,i)=> acc + (i.variavelMeta || 0), 0);
+    const sectionVarReal     = sec.items.reduce((acc,i)=> acc + (i.variavelReal || 0), 0);
 
     const sectionEl = document.createElement("section");
     sectionEl.className = "fam-section";
@@ -1300,7 +1441,10 @@ function renderFamilias(sections, summary){
       <header class="fam-section__header">
         <div class="fam-section__title">
           <span>${sec.label}</span>
-          <small class="fam-section__meta">pontos: ${fmtINT.format(sectionPointsHit)}/${fmtINT.format(sectionTotalPoints)}</small>
+          <small class="fam-section__meta">
+            <span class="fam-section__meta-item">Pontos: ${fmtINT.format(sectionPointsHit)} / ${fmtINT.format(sectionTotalPoints)}</span>
+            <span class="fam-section__meta-item">Variável: ${fmtBRL.format(sectionVarReal)} / ${fmtBRL.format(sectionVarMeta)}</span>
+          </small>
         </div>
       </header>
       <div class="fam-section__grid"></div>`;
@@ -1312,6 +1456,20 @@ function renderFamilias(sections, summary){
       const badgeClass = pct < 50 ? "badge--low" : (pct < 100 ? "badge--warn" : "badge--ok");
       const badgeTxt   = pct >= 100 ? `${Math.round(pct)}%` : `${pct.toFixed(1)}%`;
       const narrowStyle= badgeTxt.length >= 5 ? 'style="font-size:11px"' : '';
+
+      const variavelMeta = f.variavelMeta || 0;
+      const variavelReal = f.variavelReal || 0;
+      hasVisibleVar = true;
+      varMetaVisiveis += variavelMeta;
+      varRealVisiveis += variavelReal;
+      const varRatio = variavelMeta ? (variavelReal / variavelMeta) : (f.atingVariavel ?? f.ating ?? 0);
+      const varPct = Math.max(0, varRatio * 100);
+      const varPctLabel = `${varPct.toFixed(1)}%`;
+      const varFillPct = Math.max(0, Math.min(100, varPct));
+      const varTrackClass = varPct < 50 ? "var--low" : (varPct < 100 ? "var--warn" : "var--ok");
+      const varRealCompact = formatCompactBRL(variavelReal);
+      const varMetaCompact = formatCompactBRL(variavelMeta);
+      const varAccessible = `${varPctLabel} (${fmtBRL.format(Math.round(variavelReal))} de ${fmtBRL.format(Math.round(variavelMeta))})`;
 
       const realizadoTxt = formatByMetric(f.metric, f.realizado);
       const metaTxt      = formatByMetric(f.metric, f.meta);
@@ -1335,6 +1493,18 @@ function renderFamilias(sections, summary){
             <div class="kv"><small>Meta</small><strong class="has-ellipsis" title="${metaTxt}">${metaTxt}</strong></div>
           </div>
 
+          <div class="prod-card__var">
+            <div class="prod-card__var-head">
+              <small>Remuneração variável</small>
+              <strong title="${varPctLabel}">${varPctLabel}</strong>
+            </div>
+            <div class="prod-card__var-track ${varTrackClass}" role="progressbar" aria-valuemin="0" aria-valuemax="150" aria-valuenow="${Math.round(Math.min(varPct,150))}" aria-valuetext="${varAccessible}" aria-label="Atingimento da remuneração variável">
+              <span class="prod-card__var-fill" style="width:${varFillPct}%"></span>
+              <span class="prod-card__var-label prod-card__var-label--current" title="${fmtBRL.format(Math.round(variavelReal))}">${varRealCompact}</span>
+              <span class="prod-card__var-label prod-card__var-label--target" title="${fmtBRL.format(Math.round(variavelMeta))}">${varMetaCompact}</span>
+            </div>
+          </div>
+
           <div class="prod-card__foot">Atualizado em ${f.ultimaAtualizacao}</div>
           ${buildCardTooltipHTML(f)}
         </article>
@@ -1344,7 +1514,13 @@ function renderFamilias(sections, summary){
     host.appendChild(sectionEl);
   });
 
-  renderResumoKPI(summary, atingidosVisiveis, pontosAtingidosVisiveis);
+  renderResumoKPI(
+    summary,
+    atingidosVisiveis,
+    pontosAtingidosVisiveis,
+    hasVisibleVar ? varRealVisiveis : null,
+    hasVisibleVar ? varMetaVisiveis : null
+  );
 
   $$(".prod-card").forEach(card=>{
     const tip = card.querySelector(".kpi-tip");
@@ -1403,8 +1579,8 @@ function ensureExecStyles(){
     .exec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
     .seg-mini.segmented{padding:2px;border-radius:8px}
     .seg-mini .seg-btn{padding:6px 8px;font-size:12px}
-    .exec-chart{background:#fff;border:1px solid var(--stroke);border-radius:14px;box-shadow:var(--shadow);padding:12px}
-    .chart{width:100%;overflow:hidden}
+    .exec-chart{background:#fff;border:1px solid var(--stroke);border-radius:14px;box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+    .chart{width:100%;overflow:hidden;padding:20px;border-radius:12px;background:#fff}
     .chart svg{display:block;width:100%;height:auto}
     .chart-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
     .legend-item{display:inline-flex;align-items:center;gap:6px;color:#475569;font-weight:700}
@@ -1421,103 +1597,50 @@ function ensureExecStyles(){
 function createExecutiveView(){
   ensureExecStyles();
 
-  let host = document.getElementById("view-exec");
-  if(!host){
-    host = document.createElement("section");
-    host.id = "view-exec";
-    host.className = "hidden view-panel";
-    document.querySelector(".container")?.appendChild(host);
+  const host = document.getElementById("view-exec");
+  if (!host) return;
+
+  if (!state.exec) {
+    state.exec = { rankMode: "top", statusMode: "quase", chartMode: "diario" };
   }
+  state.exec.rankMode  = state.exec.rankMode  || "top";
+  state.exec.statusMode= state.exec.statusMode|| "quase";
+  state.exec.chartMode = state.exec.chartMode || "diario";
 
-  // se já montei, não refaço o DOM (só re-renderizo os dados)
-  if (host.querySelector("#exec-kpis")) return;
-
-  host.innerHTML = `
-    <section class="card card--exec">
-      <header class="card__header exec-head">
-        <div class="title-subtitle">
-          <!-- sem título -->
-          <div class="muted" id="exec-context"></div>
-        </div>
-      </header>
-
-      <!-- KPIs topo -->
-      <div id="exec-kpis" class="exec-kpis"></div>
-
-      <!-- Gráfico de evolução -->
-      <section class="exec-panel exec-span-2 exec-chart">
-        <div class="exec-h"><span id="exec-chart-title">Evolução do mês</span></div>
-        <div id="exec-chart" class="chart" role="img" aria-label="Evolução diária com linhas de meta e realizado"></div>
-        <div class="chart-legend">
-          <span class="legend-item"><span class="legend-swatch legend-swatch--bars"></span>Diário realizado (barras)</span>
-          <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado acumulado (linha)</span>
-          <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta acumulada (linha)</span>
-        </div>
-      </section>
-
-      <div class="exec-grid">
-        <!-- Painel de ranking com toggle Top/Bottom -->
-        <section class="exec-panel" id="exec-rank-panel">
-          <div class="exec-h">
-            <span id="exec-rank-title">Desempenho por unidade</span>
-            <div class="segmented seg-mini" role="tablist" aria-label="Ordenação">
-              <button type="button" class="seg-btn is-active" data-rk="top">Top 5</button>
-              <button type="button" class="seg-btn" data-rk="bottom">Bottom 5</button>
-            </div>
-          </div>
-          <div id="exec-rank" class="rank-mini"></div>
-        </section>
-
-        <!-- Painel de status com 3 visões -->
-        <section class="exec-panel" id="exec-status-panel">
-          <div class="exec-h">
-            <span id="exec-status-title">Status das unidades</span>
-            <div class="segmented seg-mini" role="tablist" aria-label="Status">
-              <button type="button" class="seg-btn" data-st="hit">Atingidas</button>
-              <button type="button" class="seg-btn is-active" data-st="quase">Quase lá</button>
-              <button type="button" class="seg-btn" data-st="longe">Longe</button>
-            </div>
-          </div>
-          <div id="exec-status-list" class="list-mini"></div>
-        </section>
-
-        <section class="exec-panel exec-span-2">
-          <h4 class="exec-h"><span id="exec-ritmo-title">Ritmo do mês</span></h4>
-          <div id="exec-ritmo" class="ritmo"></div>
-        </section>
-
-        <section class="exec-panel exec-span-2">
-          <h4 class="exec-h"><span id="exec-heatmap-title">Heatmap</span></h4>
-          <div id="exec-heatmap" class="hm"></div>
-        </section>
-      </div>
-    </section>`;
-
-  // estado local da executiva
-  if (!state.exec) state.exec = { rankMode: "top", statusMode: "quase" };
-
-  // listeners dos segmented da executiva
-  host.querySelectorAll('#exec-rank-panel .seg-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      host.querySelectorAll('#exec-rank-panel .seg-btn').forEach(x=>x.classList.remove('is-active'));
-      b.classList.add('is-active');
-      state.exec.rankMode = b.dataset.rk; // "top" | "bottom"
-      if (state.activeView==='exec') renderExecutiveView();
+  const syncSegmented = (containerSelector, dataAttr, stateKey, fallback) => {
+    const container = host.querySelector(containerSelector);
+    if (!container) return;
+    const buttons = container.querySelectorAll('.seg-btn');
+    if (!buttons.length) return;
+    const active = state.exec[stateKey] || fallback;
+    buttons.forEach(btn => {
+      const value = btn.dataset[dataAttr] || fallback;
+      btn.classList.toggle('is-active', value === active);
+      if (!btn.dataset.execBound) {
+        btn.dataset.execBound = 'true';
+        btn.addEventListener('click', () => {
+          state.exec[stateKey] = value;
+          buttons.forEach(b => b.classList.toggle('is-active', b === btn));
+          if (state.activeView === 'exec') renderExecutiveView();
+        });
+      }
     });
-  });
-  host.querySelectorAll('#exec-status-panel .seg-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      host.querySelectorAll('#exec-status-panel .seg-btn').forEach(x=>x.classList.remove('is-active'));
-      b.classList.add('is-active');
-      state.exec.statusMode = b.dataset.st; // "hit" | "quase" | "longe"
-      if (state.activeView==='exec') renderExecutiveView();
-    });
-  });
+  };
 
-  // filtros disparando re-render quando a aba executiva estiver aberta
-  const execSel = ["#f-segmento","#f-diretoria","#f-gerencia","#f-agencia","#f-ggestao","#f-gerente","#f-familia","#f-subproduto","#f-status-kpi"];
-  execSel.forEach(sel => $(sel)?.addEventListener("change", ()=>{ if (state.activeView==='exec') renderExecutiveView(); }));
-  $("#btn-consultar")?.addEventListener("click", ()=>{ if (state.activeView==='exec') renderExecutiveView(); });
+  syncSegmented('#exec-rank-panel', 'rk', 'rankMode', 'top');
+  syncSegmented('#exec-status-panel', 'st', 'statusMode', 'quase');
+  syncSegmented('#exec-chart-toggle', 'chart', 'chartMode', 'diario');
+
+  if (!host.dataset.execFiltersBound) {
+    const execSel = ["#f-segmento","#f-diretoria","#f-gerencia","#f-agencia","#f-ggestao","#f-gerente","#f-familia","#f-subproduto","#f-status-kpi"];
+    execSel.forEach(sel => $(sel)?.addEventListener("change", () => {
+      if (state.activeView === 'exec') renderExecutiveView();
+    }));
+    $("#btn-consultar")?.addEventListener("click", () => {
+      if (state.activeView === 'exec') renderExecutiveView();
+    });
+    host.dataset.execFiltersBound = "true";
+  }
 }
 
 /* Helpers de agregação para a Visão Executiva */
@@ -1599,12 +1722,20 @@ function makeDailySeries(totalMeta, totalReal, startISO, endISO){
   const labels = days.map(d=> String(d.getUTCDate()).padStart(2,"0"));
   return { labels, dailyReal, cumMeta, cumReal };
 }
+
+function chartDimensions(container, fallbackW=900, fallbackH=260){
+  if (!container) return { width: fallbackW, height: fallbackH };
+  const styles = window.getComputedStyle(container);
+  const padL = parseFloat(styles.paddingLeft) || 0;
+  const padR = parseFloat(styles.paddingRight) || 0;
+  const width = Math.max(320, (container.clientWidth || fallbackW) - padL - padR);
+  return { width, height: fallbackH };
+}
 function buildExecChart(container, series){
-  const W = container.clientWidth || 900;
-  const H = 260;
-  const m = { t:18, r:18, b:26, l:52 };
-  const iw = W - m.l - m.r;
-  const ih = H - m.t - m.b;
+  const { width: W, height: H } = chartDimensions(container);
+  const m = { t:20, r:20, b:40, l:64 };
+  const iw = Math.max(0, W - m.l - m.r);
+  const ih = Math.max(0, H - m.t - m.b);
 
   const n = series.labels.length;
   const maxY = Math.max(...series.cumMeta, ...series.cumReal) * 1.10 || 1;
@@ -1613,6 +1744,8 @@ function buildExecChart(container, series){
   const y = v => m.t + ih - (v / maxY) * ih;
 
   const barW = Math.max(2, iw / (n*1.6));
+
+  const axisY = H - m.b;
 
   // grid Y
   const gy = [];
@@ -1629,10 +1762,9 @@ function buildExecChart(container, series){
   const lineReal = `<path d="${path(series.cumReal)}" fill="none" stroke="#22c55e" stroke-width="2.5" />`;
   const lineMeta = `<path d="${path(series.cumMeta)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-dasharray="6 6" />`;
 
-  const pickIdx = (i)=> Math.min(n-1, Math.max(0, i));
-  const ticksX = [0, Math.floor(n*0.33), Math.floor(n*0.66), n-1].map(pickIdx);
-  const xlabels = [...new Set(ticksX)].map(i => 
-    `<text x="${x(i)}" y="${H-6}" font-size="10" text-anchor="middle" fill="#6b7280">${series.labels[i]}</text>`).join("");
+  const xlabels = series.labels.map((lab,i) =>
+    `<text x="${x(i)}" y="${axisY + 16}" font-size="9" text-anchor="middle" fill="#6b7280">${lab}</text>`
+  ).join("");
 
   const gridY = gy.map(g => 
     `<line x1="${m.l}" y1="${g.y}" x2="${W-m.r}" y2="${g.y}" stroke="#eef2f7"/>
@@ -1646,6 +1778,95 @@ function buildExecChart(container, series){
       ${bars}
       ${lineMeta}
       ${lineReal}
+      <line x1="${m.l}" y1="${axisY}" x2="${W-m.r}" y2="${axisY}" stroke="#e5e7eb"/>
+      ${xlabels}
+    </svg>`;
+}
+
+function monthKeyLabel(key){
+  if (!key) return "—";
+  const [y,m] = key.split('-');
+  const year = Number(y);
+  const month = Number(m);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return key;
+  const dt = new Date(Date.UTC(year, month - 1, 1));
+  return dt.toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "");
+}
+
+function makeMonthlySeries(rows, period){
+  const map = new Map();
+  const fallback = (period?.start || todayISO()).slice(0, 7);
+
+  rows.forEach(r => {
+    let src = r?.data || r?.dataReferencia || r?.dt;
+    if (src instanceof Date) src = isoFromUTCDate(src);
+    let key = "";
+    if (typeof src === "string" && src.length >= 7){
+      key = src.slice(0,7);
+    }
+    if (!key) key = fallback;
+
+    const agg = map.get(key) || { meta:0, real:0 };
+    agg.meta += (r.meta_mens ?? r.meta ?? 0);
+    agg.real += (r.real_mens ?? r.realizado ?? 0);
+    map.set(key, agg);
+  });
+
+  if (!map.size){
+    map.set(fallback, { meta:0, real:0 });
+  }
+
+  const ordered = [...map.entries()].sort((a,b)=> a[0].localeCompare(b[0]));
+  return {
+    labels: ordered.map(([key])=> monthKeyLabel(key)),
+    meta:   ordered.map(([,v])=> v.meta),
+    real:   ordered.map(([,v])=> v.real)
+  };
+}
+
+function buildExecMonthlyChart(container, series){
+  const { width: W, height: H } = chartDimensions(container);
+  const m = { t:20, r:20, b:42, l:64 };
+  const iw = Math.max(0, W - m.l - m.r);
+  const ih = Math.max(0, H - m.t - m.b);
+  const maxY = Math.max(...series.meta, ...series.real) * 1.1 || 1;
+  const n = series.labels.length;
+  const band = iw / Math.max(1, n);
+  const gap = Math.min(24, band * 0.3);
+  const barW = Math.max(12, (band - gap) / 2);
+
+  const xBase = i => m.l + band * i + gap/2;
+  const y = v => m.t + ih - (v / maxY) * ih;
+
+  const barsMeta = series.meta.map((v,i)=>
+    `<rect x="${xBase(i)}" y="${y(v)}" width="${barW}" height="${Math.max(0, y(0)-y(v))}" fill="#93c5fd" stroke="#60a5fa"/>`
+  ).join("");
+  const barsReal = series.real.map((v,i)=>
+    `<rect x="${xBase(i)+barW}" y="${y(v)}" width="${barW}" height="${Math.max(0, y(0)-y(v))}" fill="#86efac" stroke="#4ade80"/>`
+  ).join("");
+
+  const gy = [];
+  for(let k=0;k<=4;k++){
+    const val = (maxY/4)*k;
+    gy.push({ y: y(val), label: fmtBRL.format(Math.round(val)) });
+  }
+
+  const gridY = gy.map(g =>
+    `<line x1="${m.l}" y1="${g.y}" x2="${W-m.r}" y2="${g.y}" stroke="#eef2f7"/>
+     <text x="${m.l-6}" y="${g.y+3}" font-size="10" text-anchor="end" fill="#6b7280">${g.label}</text>`
+  ).join("");
+
+  const xlabels = series.labels.map((lab,i)=> {
+    const cx = m.l + band * i + band/2;
+    return `<text x="${cx}" y="${H-6}" font-size="10" text-anchor="middle" fill="#6b7280">${lab}</text>`;
+  }).join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="barras mensais de meta e realizado">
+      <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
+      ${gridY}
+      ${barsMeta}
+      ${barsReal}
       <line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" stroke="#e5e7eb"/>
       ${xlabels}
     </svg>`;
@@ -1659,9 +1880,11 @@ function renderExecutiveView(){
   const ctx    = document.getElementById("exec-context");
   const kpis   = document.getElementById("exec-kpis");
   const chartC = document.getElementById("exec-chart");
+  const chartTitleEl = document.getElementById("exec-chart-title");
+  const chartLegend = document.getElementById("exec-chart-legend");
+  const chartToggle = document.getElementById("exec-chart-toggle");
   const hm     = document.getElementById("exec-heatmap");
   const rankEl = document.getElementById("exec-rank");
-  const ritmo  = document.getElementById("exec-ritmo");
   const statusList = document.getElementById("exec-status-list");
 
   if (!Array.isArray(state._rankingRaw) || !state._rankingRaw.length){
@@ -1671,6 +1894,14 @@ function renderExecutiveView(){
 
   // base com TODOS os filtros aplicados
   const rowsBase = filterRows(state._rankingRaw);
+
+  const chartMode = state.exec?.chartMode || "diario";
+  if (chartToggle){
+    chartToggle.querySelectorAll('.seg-btn').forEach(btn=>{
+      const mode = btn.dataset.chart || "diario";
+      btn.classList.toggle('is-active', mode === chartMode);
+    });
+  }
 
   // nível inicial
   const start = execStartLevelFromFilters();
@@ -1740,8 +1971,36 @@ function renderExecutiveView(){
 
   // Gráfico
   if (chartC){
-    const series = makeDailySeries(total.meta_mens, total.real_mens, state.period.start, state.period.end);
-    buildExecChart(chartC, series);
+    const renderChart = () => {
+      const mode = state.exec?.chartMode || "diario";
+      if (mode === "mensal"){
+        const monthlySeries = makeMonthlySeries(rowsBase, state.period);
+        buildExecMonthlyChart(chartC, monthlySeries);
+        chartC.setAttribute("aria-label", "Comparativo mensal entre meta e realizado");
+        if (chartTitleEl) chartTitleEl.textContent = "Evolução mensal";
+        if (chartLegend){
+          chartLegend.innerHTML = `
+            <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta mensal (barras)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado mensal (barras)</span>
+          `;
+        }
+      } else {
+        const dailySeries = makeDailySeries(total.meta_mens, total.real_mens, state.period.start, state.period.end);
+        buildExecChart(chartC, dailySeries);
+        chartC.setAttribute("aria-label", "Evolução diária com linhas de meta e realizado");
+        if (chartTitleEl) chartTitleEl.textContent = "Evolução do mês";
+        if (chartLegend){
+          chartLegend.innerHTML = `
+            <span class="legend-item"><span class="legend-swatch legend-swatch--bars"></span>Diário realizado (barras)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado acumulado (linha)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta acumulada (linha)</span>
+          `;
+        }
+      }
+    };
+
+    renderChart();
+    host.__execChartRender = renderChart;
 
     // redimensiona enquanto essa aba estiver ativa
     if (!host.__execResize){
@@ -1749,7 +2008,8 @@ function renderExecutiveView(){
       host.__execResize = () => {
         if (state.activeView !== 'exec') return;
         if (raf) cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(()=> buildExecChart(chartC, series));
+        const fn = host.__execChartRender;
+        raf = requestAnimationFrame(()=> fn && fn());
       };
       window.addEventListener('resize', host.__execResize);
     }
@@ -1794,27 +2054,6 @@ function renderExecutiveView(){
         document.querySelector('.tab[data-view="table"]')?.click();
       });
     });
-  }
-
-  // Ritmo
-  if (ritmo){
-    const ritmoOk = mediaDiaria >= necessarioDia && total.real_mens < total.meta_mens ? "ok" : (mediaDiaria>=necessarioDia ? "ok" : "warn");
-    ritmo.innerHTML = `
-      <div class="ritmo-grid">
-        <div class="ritmo-box">
-          <div class="ritmo-label">Média/dia atual</div>
-          <div class="ritmo-val">${fmtBRL.format(Math.round(mediaDiaria))}</div>
-          <div class="ritmo-bar"><span style="width:100%"></span></div>
-        </div>
-        <div class="ritmo-box">
-          <div class="ritmo-label">Necessário/dia</div>
-          <div class="ritmo-val">${fmtBRL.format(Math.round(necessarioDia))}</div>
-          <div class="ritmo-bar ritmo-need"><span style="width:100%"></span></div>
-        </div>
-        <div class="ritmo-note ${ritmoOk==='ok'?'pos':'neg'}">
-          ${ritmoOk==='ok' ? 'No ritmo para bater a meta.' : 'Abaixo do ritmo — ajuste necessário.'}
-        </div>
-      </div>`;
   }
 
   // Heatmap — (start) × Família
@@ -2036,8 +2275,6 @@ function renderRanking(){
         <th>Pontos (mensal)</th>
         <th>Pontos (acumulado)</th>
         <th>Atingimento</th>
-        <th>Realizado (R$)</th>
-        <th>Meta (R$)</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -2048,8 +2285,6 @@ function renderRanking(){
     const isMine = (myUnit && r.unidade === myUnit);
     const nome = isMine ? r.unidade : "••••••••••";
     const ating = state.rk.mode === "acumulado" ? r.ating_acum : r.ating_mens;
-    const real  = state.rk.mode === "acumulado" ? r.real_acum : r.real_mens;
-    const meta  = state.rk.mode === "acumulado" ? r.meta_acum : r.meta_mens;
 
     const tr = document.createElement("tr");
     tr.className = `rk-row ${isMine? "rk-row--mine":""}`;
@@ -2059,8 +2294,6 @@ function renderRanking(){
       <td>${r.p_mens.toFixed(1)}</td>
       <td>${r.p_acum.toFixed(1)}</td>
       <td><span class="att-badge ${ating*100<50?"att-low":(ating*100<100?"att-warn":"att-ok")}">${(ating*100).toFixed(1)}%</span></td>
-      <td>${fmtBRL.format(real)}</td>
-      <td>${fmtBRL.format(meta)}</td>
     `;
     tb.appendChild(tr);
   });
@@ -2107,17 +2340,64 @@ function renderTreeTable() {
   const att = (p)=>{ const pct=(p*100); const cls=pct<50?"att-low":(pct<100?"att-warn":"att-ok"); return `<span class="att-badge ${cls}">${pct.toFixed(1)}%</span>`; }
   const defas = (real,meta)=>{ const d=(real||0)-(meta||0); const cls=d>=0?"def-pos":"def-neg"; return `<span class="def-badge ${cls}">${fmtBRL.format(d)}</span>`; }
 
+  const buildDetailTableHTML = (groups=[]) => {
+    if (!groups || !groups.length) return "";
+    const rows = groups.map(g => `
+      <tr>
+        <td>${g.canal || "—"}</td>
+        <td>${g.tipo || "—"}</td>
+        <td>${g.gerente || "—"}</td>
+        <td>${g.modalidade || "—"}</td>
+        <td class="num">${fmtINT.format(g.qtd || 0)}</td>
+        <td class="num">${fmtBRL.format(g.realizado || 0)}</td>
+        <td class="num">${fmtBRL.format(g.meta || 0)}</td>
+        <td class="num">${defas(g.realizado, g.meta)}</td>
+        <td class="num">${att(g.ating || 0)}</td>
+      </tr>`).join("");
+    return `
+      <div class="tree-detail-wrapper">
+        <table class="detail-table">
+          <thead>
+            <tr>
+              <th>Canal da venda</th>
+              <th>Tipo da venda</th>
+              <th>Gerente</th>
+              <th>Condição de pagamento</th>
+              <th>Quantidade</th>
+              <th>Realizado</th>
+              <th>Meta</th>
+              <th>Defasagem</th>
+              <th>Atingimento</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  };
+
   function renderNode(node, parentId=null, parentTrail=[]){
     const id=mkId(), has=!!(node.children&&node.children.length);
     const tr=document.createElement("tr");
     tr.className=`tree-row ${node.type==="contrato"?"type-contrato":""} lvl-${node.level}`;
     tr.dataset.id=id; if(parentId) tr.dataset.parent=parentId;
     const trail=[...parentTrail, node.label];
+    const hasDetails = Array.isArray(node.detailGroups) && node.detailGroups.length > 0;
+    let detailTr=null;
+
+    if (hasDetails) tr.classList.add("has-detail");
+
+    const chips = [];
+    if (node.detail?.canal) chips.push(`<span class="tree-chip"><strong>Canal:</strong> ${node.detail.canal}</span>`);
+    if (node.detail?.tipo) chips.push(`<span class="tree-chip"><strong>Tipo:</strong> ${node.detail.tipo}</span>`);
+    if (node.detail?.modalidade) chips.push(`<span class="tree-chip"><strong>Pagamento:</strong> ${node.detail.modalidade}</span>`);
+    const labelBase = node.detail?.gerente ? `Gerente: ${node.detail.gerente}` : node.label;
+    const detailHtml = chips.length ? `<div class="tree-detail">${chips.join("")}</div>` : "";
+    const labelHtml = node.detail ? `<div class="tree-label"><span class="label-strong">${labelBase}</span>${detailHtml}</div>` : `<span class="label-strong">${node.label}</span>`;
 
     tr.innerHTML=`
       <td><div class="tree-cell">
         <button class="toggle" type="button" ${has?"":"disabled"} aria-label="${has?"Expandir/colapsar":""}"><i class="ti ${has?"ti-chevron-right":"ti-dot"}"></i></button>
-        <span class="label-strong">${node.label}</span></div></td>
+        ${labelHtml}</div></td>
       <td>${fmtINT.format(node.qtd||0)}</td>
       <td>${fmtBRL.format(node.realizado||0)}</td>
       <td>${fmtBRL.format(node.meta||0)}</td>
@@ -2151,6 +2431,28 @@ function renderTreeTable() {
     }
 
     tbody.appendChild(tr);
+
+    if (hasDetails){
+      detailTr=document.createElement("tr");
+      detailTr.className="tree-row tree-detail-row";
+      detailTr.dataset.detailParent=id;
+      detailTr.style.display="none";
+      detailTr.innerHTML=`<td colspan="8">${buildDetailTableHTML(node.detailGroups)}</td>`;
+      tbody.appendChild(detailTr);
+
+      tr.addEventListener("click", (ev)=>{
+        if (ev.target.closest('.toggle') || ev.target.closest('.icon-btn')) return;
+        const open = detailTr.style.display === "table-row";
+        if (open){
+          detailTr.style.display="none";
+          tr.classList.remove("is-detail-open");
+        } else {
+          detailTr.style.display="table-row";
+          tr.classList.add("is-detail-open");
+        }
+      });
+    }
+
     if(has){
       node.children.forEach(ch=>renderNode(ch, id, trail));
       toggleChildren(id, false);
@@ -2167,6 +2469,14 @@ function renderTreeTable() {
         toggleChildren(ch.dataset.id,false);
       }
     });
+    if(!show){
+      const detail=tbody.querySelector(`tr.tree-detail-row[data-detail-parent="${parentId}"]`);
+      if(detail){
+        detail.style.display="none";
+        const parentRow=tbody.querySelector(`tr[data-id="${parentId}"]`);
+        parentRow?.classList.remove("is-detail-open");
+      }
+    }
   }
 
   nodes.forEach(n=>renderNode(n,null,[]));
@@ -2267,13 +2577,14 @@ async function refresh(){
     const dataset = await getData();
     state._dataset = dataset;
     state._rankingRaw = dataset.ranking;
+    updateContractAutocomplete();
 
     const right = document.getElementById("lbl-atualizacao");
     if(right){
       right.innerHTML = `
         <div class="period-inline">
           <span class="txt">
-            Valores acumulados desde
+            De
             <strong><span id="lbl-periodo-inicio">${formatBRDate(state.period.start)}</span></strong>
             até
             <strong><span id="lbl-periodo-fim">${formatBRDate(state.period.end)}</span></strong>
