@@ -21,6 +21,42 @@ const $  = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 const fmtBRL = new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" });
 const fmtINT = new Intl.NumberFormat("pt-BR");
+const fmtONE = new Intl.NumberFormat("pt-BR", { minimumFractionDigits:1, maximumFractionDigits:1 });
+const setActiveTab = (viewId = "cards") => {
+  const tabs = Array.from($$(".tab"));
+  const target = tabs.some(tab => (tab.dataset.view || "") === viewId) ? viewId : "cards";
+  tabs.forEach(tab => {
+    const expected = tab.dataset.view || "";
+    tab.classList.toggle("is-active", expected === target);
+  });
+  const sidebarLinks = Array.from(document.querySelectorAll(".sidebar__link"));
+  if (sidebarLinks.length) {
+    sidebarLinks.forEach(link => {
+      const route = link.dataset.route || "";
+      if (target === "campanhas") {
+        link.classList.toggle("is-active", route === "campanhas");
+      } else if (["cards", "table", "ranking", "exec"].includes(target)) {
+        link.classList.toggle("is-active", route === "pobj");
+      }
+    });
+  }
+};
+const fmtBRLParts = fmtBRL.formatToParts(1);
+const CURRENCY_SYMBOL = fmtBRLParts.find(p => p.type === "currency")?.value || "R$";
+const CURRENCY_LITERAL = fmtBRLParts.find(p => p.type === "literal")?.value || " ";
+const SUFFIX_RULES = [
+  { value: 1_000_000_000_000, singular: "trilhão", plural: "trilhões" },
+  { value: 1_000_000_000,     singular: "bilhão",  plural: "bilhões" },
+  { value: 1_000_000,         singular: "milhão",  plural: "milhões" },
+  { value: 1_000,             singular: "mil",     plural: "mil" }
+];
+const MOTIVOS_CANCELAMENTO = [
+  "Solicitação do cliente",
+  "Inadimplência",
+  "Renovação antecipada",
+  "Ajuste comercial",
+  "Migração de produto"
+];
 
 /* ===== Ajusta altura conforme topbar (svh) ===== */
 const setTopbarH = () => {
@@ -40,20 +76,21 @@ const TABLE_VIEWS = [
   { id:"gerente",   label:"Gerente",            key:"gerente" },
   { id:"familia",   label:"Família",            key:"familia" },
   { id:"prodsub",   label:"Produto/Subproduto", key:"prodOrSub" },
+  { id:"contrato",  label:"Contratos",          key:"contrato" },
 ];
 
 /* === Seções e cards === */
 const CARD_SECTIONS_DEF = [
-  { id:"financeiro", label:"FINANCEIRO", items:[
-    { id:"rec_vencidos_59",     nome:"Recuperação de Vencidos até 59 dias",      icon:"ti ti-rotate-rectangle", peso:6, metric:"valor" },
-    { id:"rec_vencidos_50mais", nome:"Recuperação de Vencidos acima de 50 dias", icon:"ti ti-rotate-rectangle", peso:5, metric:"valor" },
-    { id:"rec_credito",         nome:"Recuperação de Crédito",                    icon:"ti ti-cash",             peso:5, metric:"valor" },
-  ]},
   { id:"captacao", label:"CAPTAÇÃO", items:[
     { id:"captacao_bruta",   nome:"Captação Bruta",                           icon:"ti ti-pig-money",       peso:4, metric:"valor" },
     { id:"captacao_liquida", nome:"Captação Líquida",                         icon:"ti ti-arrows-exchange", peso:4, metric:"valor" },
     { id:"portab_prev",      nome:"Portabilidade de Previdência Privada",     icon:"ti ti-shield-check",    peso:3, metric:"valor" },
     { id:"centralizacao",    nome:"Centralização de Caixa",                   icon:"ti ti-briefcase",       peso:3, metric:"valor" },
+  ]},
+  { id:"financeiro", label:"FINANCEIRO", items:[
+    { id:"rec_vencidos_59",     nome:"Recuperação de Vencidos até 59 dias",      icon:"ti ti-rotate-rectangle", peso:6, metric:"valor" },
+    { id:"rec_vencidos_50mais", nome:"Recuperação de Vencidos acima de 50 dias", icon:"ti ti-rotate-rectangle", peso:5, metric:"valor" },
+    { id:"rec_credito",         nome:"Recuperação de Crédito",                    icon:"ti ti-cash",             peso:5, metric:"valor" },
   ]},
   { id:"credito", label:"CRÉDITO", items:[
     { id:"prod_credito_pj", nome:"Produção de Crédito PJ",               icon:"ti ti-building-bank",  peso:8, metric:"valor" },
@@ -86,6 +123,110 @@ const PRODUCT_INDEX = (() => {
   return map;
 })();
 
+const CAMPAIGN_SPRINTS = [
+  {
+    id: "sprint-p7-2025",
+    label: "Sprint PJ 2025",
+    cycle: "Sprint P7 • Setembro 2025",
+    period: { start: "2025-09-01", end: "2025-09-20" },
+    note: "Cada indicador tem mínimo de 90% e teto de 150%. É preciso somar pelo menos 100 pontos para elegibilidade.",
+    headStats: [
+      { label: "Meta mínima", value: "100 pts" },
+      { label: "Indicador mínimo", value: "90%" },
+      { label: "Teto considerado", value: "150%" }
+    ],
+    summary: [
+      { id: "equipes", label: "Equipes elegíveis", value: 18, total: 24 },
+      { id: "media", label: "Pontuação média", value: 108.4, unit: "pts" },
+      { id: "recorde", label: "Maior pontuação", value: 132.7, unit: "pts", complement: "BEN/ Norte & Nordeste" },
+      { id: "atualizacao", label: "Atualização", text: "20/09/2025 08:30" }
+    ],
+    team: {
+      minThreshold: 90,
+      superThreshold: 120,
+      cap: 150,
+      eligibilityMinimum: 100,
+      defaultPreset: "meta",
+      indicators: [
+        { id: "linhas", label: "Linhas governamentais", short: "Linhas", weight: 40, hint: "Operações direcionadas, BB Giro e BNDES.", default: 100 },
+        { id: "cash", label: "Cash (TPV)", short: "Cash", weight: 30, hint: "Centralização de caixa e TPV eletrônico.", default: 100 },
+        { id: "conquista", label: "Conquista cliente PJ", short: "Conquista", weight: 30, hint: "Abertura de contas e ativação digital.", default: 100 }
+      ],
+      presets: [
+        { id: "minimo", label: "Mínimo obrigatório (90%)", values: { linhas: 90, cash: 90, conquista: 90 } },
+        { id: "meta", label: "Meta do sprint (100%)", values: { linhas: 100, cash: 100, conquista: 100 } },
+        { id: "stretch", label: "Meta esticada (120%)", values: { linhas: 120, cash: 120, conquista: 120 } }
+      ]
+    },
+    individual: {
+      profiles: [
+        {
+          id: "negocios",
+          label: "Negócios",
+          description: "Carteiras MPE com foco em relacionamento consultivo.",
+          minThreshold: 90,
+          superThreshold: 120,
+          cap: 150,
+          eligibilityMinimum: 100,
+          defaultPreset: "meta",
+          indicators: [
+            { id: "linhas", label: "Linhas governamentais", short: "Linhas", weight: 40, default: 100 },
+            { id: "cash", label: "Cash (TPV)", short: "Cash", weight: 30, default: 100 },
+            { id: "conquista", label: "Conquista cliente PJ", short: "Conquista", weight: 30, default: 100 }
+          ],
+          presets: [
+            { id: "minimo", label: "90% em todos", values: { linhas: 90, cash: 90, conquista: 90 } },
+            { id: "meta", label: "Meta (100%)", values: { linhas: 100, cash: 100, conquista: 100 } },
+            { id: "destaque", label: "Stretch (120%)", values: { linhas: 120, cash: 120, conquista: 120 } }
+          ],
+          scenarios: [
+            { id: "full", label: "100% em todas as linhas", values: { linhas: 100, cash: 100, conquista: 100 }, note: "Parabéns" },
+            { id: "linhas120", label: "Linhas 120%, Cash 100%, Conquista 90%", values: { linhas: 120, cash: 100, conquista: 90 }, note: "Elegível" },
+            { id: "cash115", label: "Linhas 95%, Cash 115%, Conquista 130%", values: { linhas: 95, cash: 115, conquista: 130 }, note: "Elegível" },
+            { id: "ajuste", label: "Linhas 85%, Cash 80%, Conquista 110%", values: { linhas: 85, cash: 80, conquista: 110 }, note: "Ajustar" }
+          ]
+        },
+        {
+          id: "empresas",
+          label: "Empresas",
+          description: "Grandes empresas e governo com foco em volume.",
+          minThreshold: 90,
+          superThreshold: 120,
+          cap: 150,
+          eligibilityMinimum: 100,
+          defaultPreset: "meta",
+          indicators: [
+            { id: "linhas", label: "Linhas governamentais", short: "Linhas", weight: 45, default: 100 },
+            { id: "cash", label: "Cash (TPV)", short: "Cash", weight: 35, default: 100 },
+            { id: "conquista", label: "Conquista cliente PJ", short: "Conquista", weight: 20, default: 100 }
+          ],
+          presets: [
+            { id: "minimo", label: "90% em todos", values: { linhas: 90, cash: 90, conquista: 90 } },
+            { id: "meta", label: "Meta (100%)", values: { linhas: 100, cash: 100, conquista: 100 } },
+            { id: "stretch", label: "Stretch (120%)", values: { linhas: 120, cash: 120, conquista: 120 } }
+          ],
+          scenarios: [
+            { id: "volume", label: "Linhas 130%, Cash 115%, Conquista 95%", values: { linhas: 130, cash: 115, conquista: 95 }, note: "Parabéns" },
+            { id: "equilibrio", label: "Linhas 110%, Cash 105%, Conquista 100%", values: { linhas: 110, cash: 105, conquista: 100 }, note: "Elegível" },
+            { id: "alerta", label: "Linhas 92%, Cash 88%, Conquista 96%", values: { linhas: 92, cash: 88, conquista: 96 }, note: "Ajustar" },
+            { id: "critico", label: "Linhas 80%, Cash 78%, Conquista 85%", values: { linhas: 80, cash: 78, conquista: 85 }, note: "Não elegível" }
+          ]
+        }
+      ]
+    },
+    ranking: [
+      { rank: 1, regional: "BEN/ Norte & Nordeste", linhas: 132.4, cash: 118.2, conquista: 112.6, atividade: true, status: "Parabéns" },
+      { rank: 2, regional: "BEN/ Paraná", linhas: 125.8, cash: 111.4, conquista: 104.2, atividade: true, status: "Parabéns" },
+      { rank: 3, regional: "BBE/ Sul Centro", linhas: 118.5, cash: 109.8, conquista: 99.3, atividade: true, status: "Elegível" },
+      { rank: 4, regional: "BBE/ Sudeste", linhas: 112.1, cash: 103.6, conquista: 101.7, atividade: true, status: "Elegível" },
+      { rank: 5, regional: "BBE/ Centro-Oeste", linhas: 107.6, cash: 100.4, conquista: 95.8, atividade: false, status: "Elegível" },
+      { rank: 6, regional: "BEN/ Interior SP", linhas: 101.3, cash: 94.7, conquista: 88.5, atividade: true, status: "Ajustar" },
+      { rank: 7, regional: "BEN/ Rio de Janeiro", linhas: 96.4, cash: 90.2, conquista: 86.1, atividade: false, status: "Ajustar" },
+      { rank: 8, regional: "BBE/ Norte", linhas: 88.2, cash: 84.5, conquista: 80.9, atividade: true, status: "Não elegível" }
+    ]
+  }
+];
+
 /* ===== Datas (UTC) ===== */
 function firstDayOfMonthISO(d=new Date()){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-01`; }
 function todayISO(d=new Date()){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
@@ -113,17 +254,86 @@ function businessDaysRemainingFromToday(startISO,endISO){
 }
 
 /* ===== Helpers de métrica ===== */
+const toNumber = (value) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const escapeHTML = (value = "") => String(value).replace(/[&<>"']/g, (ch) => ({
+  "&":"&amp;",
+  "<":"&lt;",
+  ">":"&gt;",
+  '"':"&quot;",
+  "'":"&#39;"
+}[ch]));
+
+function formatNumberWithSuffix(value, { currency = false } = {}) {
+  const n = toNumber(value);
+  if (!Number.isFinite(n)) return currency ? fmtBRL.format(0) : fmtINT.format(0);
+  const abs = Math.abs(n);
+  if (abs < 1000) {
+    return currency ? fmtBRL.format(n) : fmtINT.format(Math.round(n));
+  }
+  const rule = SUFFIX_RULES.find(r => abs >= r.value);
+  if (!rule) {
+    return currency ? fmtBRL.format(n) : fmtINT.format(Math.round(n));
+  }
+  const absScaled = abs / rule.value;
+  const nearInteger = Math.abs(absScaled - Math.round(absScaled)) < 0.05;
+  let digits;
+  if (absScaled >= 100) digits = 0;
+  else if (absScaled >= 10) digits = nearInteger ? 0 : 1;
+  else digits = nearInteger ? 0 : 1;
+  const numberFmt = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  const formatted = numberFmt.format(absScaled);
+  const isSingular = Math.abs(absScaled - 1) < 0.05;
+  const label = isSingular ? rule.singular : rule.plural;
+  if (currency) {
+    const sign = n < 0 ? "-" : "";
+    return `${sign}${CURRENCY_SYMBOL}${CURRENCY_LITERAL}${formatted} ${label}`;
+  }
+  const sign = n < 0 ? "-" : "";
+  return `${sign}${formatted} ${label}`;
+}
+
+function formatIntReadable(value){
+  return formatNumberWithSuffix(value, { currency: false });
+}
+function formatBRLReadable(value){
+  return formatNumberWithSuffix(value, { currency: true });
+}
+
+function formatMetricFull(metric, value){
+  const n = Math.round(toNumber(value));
+  if(metric === "perc") return `${toNumber(value).toFixed(1)}%`;
+  if(metric === "qtd")  return fmtINT.format(n);
+  return fmtBRL.format(n);
+}
 function formatByMetric(metric, value){
-  if(metric === "perc") return `${Number(value).toFixed(1)}%`;
-  if(metric === "qtd")  return fmtINT.format(Math.round(value));
-  return fmtBRL.format(Math.round(value));
+  if(metric === "perc") return `${toNumber(value).toFixed(1)}%`;
+  if(metric === "qtd")  return formatIntReadable(value);
+  return formatBRLReadable(value);
+}
+function formatCompactBRL(value){
+  return formatNumberWithSuffix(value, { currency: true });
 }
 function makeRandomForMetric(metric){
-  if(metric === "perc"){ const meta=100; const realizado=Math.round(45+Math.random()*75); return { meta, realizado }; }
-  if(metric === "qtd"){ const meta=Math.round(1_000+Math.random()*19_000); const realizado=Math.round(meta*(0.75+Math.random()*0.6)); return { meta, realizado }; }
-  const meta=Math.round(4_000_000+Math.random()*16_000_000);
-  const realizado=Math.round(meta*(0.75+Math.random()*0.6));
-  return { meta, realizado };
+  if(metric === "perc"){
+    const meta = 100;
+    const realizado = Math.round(45 + Math.random()*75);
+    const variavelMeta = Math.round(160_000 + Math.random()*180_000);
+    return { meta, realizado, variavelMeta };
+  }
+  if(metric === "qtd"){
+    const meta = Math.round(1_000 + Math.random()*19_000);
+    const realizado = Math.round(meta * (0.75 + Math.random()*0.6));
+    const variavelMeta = Math.round(150_000 + Math.random()*220_000);
+    return { meta, realizado, variavelMeta };
+  }
+  const meta = Math.round(4_000_000 + Math.random()*16_000_000);
+  const realizado = Math.round(meta * (0.75 + Math.random()*0.6));
+  const variavelMeta = Math.round(320_000 + Math.random()*420_000);
+  return { meta, realizado, variavelMeta };
 }
 
 /* ===== API / MOCK ===== */
@@ -135,16 +345,50 @@ async function apiGet(path, params){
 async function getData(){
   const period = state.period || { start:firstDayOfMonthISO(), end: todayISO() };
 
+  const startDt = dateUTCFromISO(period.start);
+  const endDt = dateUTCFromISO(period.end);
+  let startRef = startDt;
+  let endRef = endDt;
+  if (startRef && endRef && startRef > endRef) [startRef, endRef] = [endRef, startRef];
+  const defaultISO = period.end || period.start || todayISO();
+  const randomPeriodISO = () => {
+    if (!startRef || !endRef) return defaultISO;
+    const spanDays = Math.max(0, Math.round((endRef - startRef) / (24 * 60 * 60 * 1000)));
+    const offset = spanDays > 0 ? Math.floor(Math.random() * (spanDays + 1)) : 0;
+    const dt = new Date(startRef.getTime());
+    dt.setUTCDate(dt.getUTCDate() + offset);
+    return isoFromUTCDate(dt);
+  };
+
   // MOCK
-  const hoje = new Date();
   const sections = CARD_SECTIONS_DEF.map(sec=>{
     const items = sec.items.map(it=>{
-      const { meta, realizado } = makeRandomForMetric(it.metric);
-      const ating = it.metric==="perc" ? (realizado/100) : (meta? realizado/meta : 0);
-      return { ...it, meta, realizado, ating, atingido: ating>=1, ultimaAtualizacao: hoje.toLocaleDateString("pt-BR") };
+      const { meta, realizado, variavelMeta } = makeRandomForMetric(it.metric);
+      const ating = it.metric==="perc" ? (realizado/100) : (meta ? realizado/meta : 0);
+      const variavelReal = Math.max(0, Math.round((variavelMeta || 0) * ating));
+      const atingVariavel = variavelMeta ? (variavelReal / variavelMeta) : ating;
+      return {
+        ...it,
+        meta,
+        realizado,
+        variavelMeta,
+        variavelReal,
+        ating,
+        atingVariavel,
+        atingido: ating>=1,
+        ultimaAtualizacao: formatBRDate(defaultISO)
+      };
     });
     return { id:sec.id, label:sec.label, items };
   });
+
+  const totalsVar = sections.reduce((acc, sec)=>{
+    sec.items.forEach(item => {
+      acc.possivel += item.variavelMeta || 0;
+      acc.atingido += item.variavelReal || 0;
+    });
+    return acc;
+  }, { possivel:0, atingido:0 });
 
   const allItems = sections.flatMap(s => s.items);
   const indicadoresTotal = allItems.length;
@@ -157,6 +401,9 @@ async function getData(){
   const segs  = ["Empresas","Negócios","MEI"];
   const prodIds = [...PRODUCT_INDEX.keys()];
   const famsMacro = ["Crédito","Investimentos","Seguros","Consórcios","Previdência","Cartão de crédito"];
+  const canaisVenda = ["Agência física","Digital","Correspondente","APP Empresas"];
+  const tiposVenda = ["Venda consultiva","Venda direta","Cross-sell","Pós-venda"];
+  const modalidadesVenda = ["À vista","Parcelado"];
 
   const ranking = Array.from({length:140}, (_,i)=>{
     const produtoId = prodIds[i % prodIds.length];
@@ -171,6 +418,10 @@ async function getData(){
     const meta_acum = Math.round(meta_mens * fator);
     const real_acum = Math.round(real_mens * fator);
 
+    const canalVenda = canaisVenda[Math.floor(Math.random()*canaisVenda.length)];
+    const tipoVenda = tiposVenda[Math.floor(Math.random()*tiposVenda.length)];
+    const modalidadePagamento = modalidadesVenda[Math.floor(Math.random()*modalidadesVenda.length)];
+
     return {
       diretoria: dres[i % dres.length],
       gerenciaRegional: grs[i % grs.length],
@@ -183,10 +434,13 @@ async function getData(){
       gerente: `Gerente ${1+(i%16)}`,
       agencia: `Ag ${1000+i}`,
       segmento: segs[i % segs.length],
+      canalVenda,
+      tipoVenda,
+      modalidadePagamento,
       realizado: real_mens,
       meta:      meta_mens,
       qtd:       Math.round(50 + Math.random()*1950),
-      data:      todayISO(),
+      data:      randomPeriodISO(),
       real_mens, meta_mens, real_acum, meta_acum
     };
   });
@@ -200,7 +454,10 @@ async function getData(){
       indicadoresPct: indicadoresTotal ? indicadoresAtingidos/indicadoresTotal : 0,
       pontosPossiveis,
       pontosAtingidos,
-      pontosPct: pontosPossiveis ? pontosAtingidos/pontosPossiveis : 0
+      pontosPct: pontosPossiveis ? pontosAtingidos/pontosPossiveis : 0,
+      varPossivel: totalsVar.possivel,
+      varAtingido: totalsVar.atingido,
+      varPct: totalsVar.possivel ? (totalsVar.atingido / totalsVar.possivel) : 0
     },
     ranking,
     period
@@ -338,6 +595,12 @@ function ensureSidebar(){
       document.querySelectorAll(".sidebar__link").forEach(x=>x.classList.remove("is-active"));
       a.classList.add("is-active");
       if(isMobile()) closeMobile();
+      const route = a.dataset.route;
+      if (route === "campanhas") {
+        if (state.activeView !== "campanhas") switchView("campanhas");
+      } else if (route === "pobj") {
+        if (state.activeView !== "cards") switchView("cards");
+      }
     });
   });
 }
@@ -351,16 +614,31 @@ const state = {
   tableView:"diretoria",
   tableRendered:false,
   isAnimating:false,
-  period: { start:firstDayOfMonthISO(), end: todayISO() },
+  period: { start:"2025-09-01", end:"2025-09-20" },
   datePopover:null,
   compact:false,
+  contractIndex:[],
+  lastNonContractView:"diretoria",
 
   // ranking
   rk:{ mode:"mensal", level:"agencia" },
 
   // busca por contrato (usa o input #busca)
-  tableSearchTerm:""
+  tableSearchTerm:"",
+
+  campanhas:{
+    sprintId: CAMPAIGN_SPRINTS[0]?.id || null,
+    teamValues:{},
+    teamPreset:{},
+    individualProfile: CAMPAIGN_SPRINTS[0]?.individual?.profiles?.[0]?.id || null,
+    individualValues:{},
+    individualPreset:{}
+  }
 };
+
+const contractSuggestState = { items: [], highlight: -1, open: false, term: "", pending: null };
+let contractSuggestDocBound = false;
+let contractSuggestPanelBound = false;
 
 /* ===== Utils UI ===== */
 function injectStyles(){
@@ -374,76 +652,39 @@ function injectStyles(){
   .view-panel.is-enter-active{ opacity:1; transform:translateY(0); }
   .hidden{ display:none; }
 
-  /* ===== KPI topo: versão mais “grossa” ===== */
+  /* ===== KPI topo: versão ajustada ===== */
   #kpi-summary.kpi-summary{
     display:flex !important;
     flex-wrap:wrap;
-    gap:8px;
-    margin:6px 0 8px;
-    align-items:stretch;
+    gap:18px;
+    margin:8px 0 14px;
+    align-items:flex-start;
   }
-  #kpi-summary .kpi-pill{ padding:10px 12px; gap:10px; }
-  #kpi-summary .kpi-icon{ width:28px; height:28px; }
-  #kpi-summary .kpi-strip__label{ font-size:13px; }
-  #kpi-summary .kpi-stat{ font-size:12px; }
-
-  #kpi-summary .hitbar__track{ height:12px; border-width:1.5px; }
-  #kpi-summary .hitbar strong{ font-size:12px; min-width:42px; max-width:60px; }
-
   #kpi-summary .kpi-pill{
-    flex:1 1 0;
-    min-width:188px;
-    padding:6px 8px;
-    display:flex; align-items:center; gap:8px;
-    overflow:hidden; min-width:0;
+    flex:1 1 320px;
+    min-width:280px;
+    padding:24px 26px;
+    gap:14px;
+  }
+  #kpi-summary .kpi-strip__main{ gap:14px; }
+  #kpi-summary .kpi-icon{ width:42px; height:42px; font-size:18px; }
+  #kpi-summary .kpi-strip__label{ font-size:13.5px; max-width:220px; }
+  #kpi-summary .kpi-stat{ font-size:12.5px; }
+
+  #kpi-summary .hitbar{
+    width:100%;
+    gap:12px;
+  }
+  #kpi-summary .hitbar__track{
+    min-width:0;
+    height:9px;
+    border-width:1.5px;
+  }
+  #kpi-summary .hitbar strong{
+    font-size:12.5px;
   }
 
-  .kpi-strip{ display:flex; align-items:center; gap:6px; width:100%; min-width:0; }
-  .kpi-icon{
-    width:22px; height:22px; border-radius:999px;
-    display:grid; place-items:center;
-    background:#eef2ff; color:#1d4ed8;
-    flex:0 0 22px;
-  }
-
-  .kpi-strip__label{
-    font-weight:800; color:#111827;
-    font-size:12px; line-height:1;
-    flex:0 1 78px; min-width:56px; max-width:120px;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  }
-  .kpi-stat{
-    color:#6b7280; font-size:11px; line-height:1;
-    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-    flex:0 1 92px; min-width:68px;
-    font-variant-numeric: tabular-nums;
-  }
-  .kpi-stat strong{ color:#111827; }
-
-  .hitbar{
-    display:flex; align-items:center; gap:6px;
-    flex:1 1 160px; margin-left:auto; min-width:0;
-  }
-  .hitbar__track{
-    position:relative; flex:1 1 0; min-width:70px;
-    height:8px; border-radius:999px;
-    background:#eef2ff; border:1px solid #e5e7eb; overflow:hidden;
-  }
-  .hitbar__fill{ position:absolute; left:0; top:0; bottom:0; width:0%; }
-  .hitbar--low  .hitbar__fill{ background:#fecaca; }
-  .hitbar--warn .hitbar__fill{ background:#fed7aa; }
-  .hitbar--ok   .hitbar__fill{ background:#bbf7d0; }
-
-  .hitbar strong{
-    flex:0 1 42px; min-width:36px; max-width:54px;
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-    text-align:right; font-weight:800; font-size:11px; color:#111827;
-  }
-
-  @media (max-width: 1280px){
-    #kpi-summary .kpi-stat--total{ display:none; }
-  }
-  @media (max-width: 520px){
+  @media (max-width: 720px){
     #kpi-summary .kpi-pill{ min-width:100%; }
   }
 `;
@@ -543,6 +784,12 @@ function clearFilters() {
   // limpa busca (contrato) e estado
   state.tableSearchTerm = "";
   if ($("#busca")) $("#busca").value = "";
+  refreshContractSuggestions("");
+  if (state.tableView === "contrato") {
+    state.tableView = "diretoria";
+    state.lastNonContractView = "diretoria";
+    setActiveChip("diretoria");
+  }
 
   applyFiltersAndRender();
   if (state._dataset) renderFamilias(state._dataset.sections, state._dataset.summary);
@@ -603,6 +850,9 @@ function ensureChipBarAndToolbar() {
     if (v.id === state.tableView) chip.classList.add("is-active");
     chip.addEventListener("click", () => {
       if (state.tableView === v.id) return;
+      if (v.id === "contrato" && state.tableView !== "contrato") {
+        state.lastNonContractView = state.tableView;
+      }
       state.tableView = v.id;
       setActiveChip(v.id);
       renderTreeTable();
@@ -629,6 +879,9 @@ function ensureChipBarAndToolbar() {
 }
 function setActiveChip(viewId) {
   $$("#chipbar .chip").forEach(c => c.classList.toggle("is-active", c.dataset.view === viewId));
+  if (viewId && viewId !== "contrato") {
+    state.lastNonContractView = viewId;
+  }
 }
 
 /* ===== “Filtros aplicados” ===== */
@@ -734,6 +987,7 @@ function filterRowsExcept(rows, except = {}, opts = {}) {
 function filterRows(rows) { return filterRowsExcept(rows, {}, { searchTerm: state.tableSearchTerm }); }
 
 function autoSnapViewToFilters() {
+  if (state.tableSearchTerm) return;
   const f = getFilterValues();
   let snap = null;
   if (f.produtoId && f.produtoId !== "Todas") snap = "prodsub";
@@ -747,18 +1001,52 @@ function autoSnapViewToFilters() {
 function ensureContracts(r) {
   if (r._contracts) return r._contracts;
   const n = 2 + Math.floor(Math.random() * 3), arr = [];
+  const periodYear = Number((state.period?.start || todayISO()).slice(0,4)) || new Date().getFullYear();
   for (let i = 0; i < n; i++) {
-    const id = `CT-${new Date().getFullYear()}-${String(Math.floor(1e6 + Math.random() * 9e6)).padStart(7, "0")}`;
+    const id = `CT-${periodYear}-${String(Math.floor(1e6 + Math.random() * 9e6)).padStart(7, "0")}`;
     const valor = Math.round((r.realizado / n) * (0.6 + Math.random() * 0.9)),
           meta  = Math.round((r.meta       / n) * (0.6 + Math.random() * 0.9));
     const sp = r.subproduto || r.produto;
-    arr.push({ id, produto: r.produto, subproduto: r.subproduto || "", prodOrSub: sp, qtd: 1, realizado: valor, meta, ating: meta ? (valor / meta) : 0, data: r.data, tipo: Math.random() > .5 ? "Venda direta" : "Digital" });
+    const canalVenda = r.canalVenda || (Math.random() > .5 ? "Agência física" : "Digital");
+    const tipoVenda = r.tipoVenda || (Math.random() > .5 ? "Venda consultiva" : "Venda direta");
+    const modalidadePagamento = r.modalidadePagamento || (Math.random() > .5 ? "À vista" : "Parcelado");
+    const baseISO = r.data || todayISO();
+    const baseDateUTC = dateUTCFromISO(baseISO);
+    const dueDateUTC = new Date(baseDateUTC);
+    dueDateUTC.setUTCDate(dueDateUTC.getUTCDate() + 10 + Math.floor(Math.random() * 25));
+    const dataVencimento = isoFromUTCDate(dueDateUTC);
+    let dataCancelamento = "";
+    let motivoCancelamento = "";
+    if (Math.random() < 0.25) {
+      const cancelDateUTC = new Date(dueDateUTC);
+      cancelDateUTC.setUTCDate(cancelDateUTC.getUTCDate() - Math.floor(Math.random() * 6));
+      dataCancelamento = isoFromUTCDate(cancelDateUTC);
+      motivoCancelamento = MOTIVOS_CANCELAMENTO[Math.floor(Math.random() * MOTIVOS_CANCELAMENTO.length)];
+    }
+    arr.push({
+      id,
+      produto: r.produto,
+      subproduto: r.subproduto || "",
+      prodOrSub: sp,
+      qtd: 1,
+      realizado: valor,
+      meta,
+      ating: meta ? (valor / meta) : 0,
+      data: r.data,
+      canalVenda,
+      tipoVenda,
+      modalidadePagamento,
+      gerente: r.gerente,
+      dataVencimento,
+      dataCancelamento,
+      motivoCancelamento
+    });
   }
   r._contracts = arr; return arr;
 }
 function buildTree(list, startKey) {
-  const keyMap = { diretoria:"diretoria", gerencia:"gerenciaRegional", agencia:"agencia", gGestao:"gerenteGestao", gerente:"gerente", familia:"familia", prodsub:"prodOrSub", produto:"prodOrSub" };
-  const NEXT   = { diretoria:"gerencia",  gerencia:"agencia",         agencia:"gGestao", gGestao:"gerente",       gerente:"prodsub", familia:"contrato",   prodsub:"contrato" };
+  const keyMap = { diretoria:"diretoria", gerencia:"gerenciaRegional", agencia:"agencia", gGestao:"gerenteGestao", gerente:"gerente", familia:"familia", prodsub:"prodOrSub", produto:"prodOrSub", contrato:"contrato" };
+  const NEXT   = { diretoria:"gerencia",  gerencia:"agencia",         agencia:"gGestao", gGestao:"gerente",       gerente:"prodsub", familia:"contrato",   prodsub:"contrato", contrato:null };
 
   function group(arr, key){
     const m = new Map();
@@ -773,24 +1061,326 @@ function buildTree(list, startKey) {
     return { realizado, meta, qtd, ating: meta? realizado/meta : 0, data };
   }
 
+  function buildDetailGroups(arr){
+    const map = new Map();
+    arr.forEach(r => {
+      const canal = r.canalVenda || "Canal não informado";
+      const tipo = r.tipoVenda || "Tipo não informado";
+      const gerente = r.gerente || "—";
+      const modalidade = r.modalidadePagamento || (r.subproduto || "Modalidade não informada");
+      const key = `${canal}|${tipo}|${gerente}|${modalidade}`;
+      const bucket = map.get(key) || [];
+      bucket.push(r);
+      map.set(key, bucket);
+    });
+    return [...map.entries()].map(([comboKey, subset]) => {
+      const [canal, tipo, gerente, modalidade] = comboKey.split("|");
+      const a = agg(subset);
+      const dataVencimento = subset.reduce((curr, item) => {
+        if (!item.dataVencimento) return curr;
+        return !curr || item.dataVencimento > curr ? item.dataVencimento : curr;
+      }, "");
+      const dataCancelamento = subset.reduce((curr, item) => {
+        if (!item.dataCancelamento) return curr;
+        return !curr || item.dataCancelamento > curr ? item.dataCancelamento : curr;
+      }, "");
+      const motivoCancelamento = subset.reduce((curr, item) => curr || item.motivoCancelamento || "", "");
+      return {
+        canal,
+        tipo,
+        gerente,
+        modalidade,
+        realizado: a.realizado,
+        meta: a.meta,
+        qtd: a.qtd,
+        ating: a.ating,
+        data: a.data,
+        dataVencimento,
+        dataCancelamento,
+        motivoCancelamento
+      };
+    }).sort((a,b)=> (b.realizado||0) - (a.realizado||0));
+  }
+
   function buildLevel(arr, levelKey, level){
     if (levelKey === "contrato") {
-      return arr.flatMap(r => ensureContracts(r).map(c => ({
-        type:"contrato", level, label:c.id, realizado:c.realizado, meta:c.meta, qtd:c.qtd, ating:c.ating, data:c.data,
-        breadcrumb:[c.prodOrSub, r.gerente, r.gerenteGestao, r.agencia, r.gerenciaRegional, r.diretoria].filter(Boolean),
-        children:[]
-      })));
+      return arr.flatMap(r => ensureContracts(r).map(c => {
+        const detailGroups = buildDetailGroups([c]);
+        const detailBase = detailGroups[0] || null;
+        const detail = detailBase ? {
+          canal: detailBase.canal,
+          tipo: detailBase.tipo,
+          gerente: detailBase.gerente,
+          modalidade: detailBase.modalidade
+        } : null;
+        return {
+          type:"contrato",
+          level,
+          label:c.id,
+          realizado:c.realizado,
+          meta:c.meta,
+          qtd:c.qtd,
+          ating:c.ating,
+          data:c.data,
+          detail,
+          detailGroups,
+          breadcrumb:[c.prodOrSub, r.gerente, r.gerenteGestao, r.agencia, r.gerenciaRegional, r.diretoria].filter(Boolean),
+          children:[]
+        };
+      }));
     }
     const mapKey = keyMap[levelKey] || levelKey;
     return group(arr, mapKey).map(([k, subset]) => {
       const a = agg(subset), next = NEXT[levelKey];
       return {
         type:"grupo", level, label:k, realizado:a.realizado, meta:a.meta, qtd:a.qtd, ating:a.ating, data:a.data,
-        breadcrumb:[k], children: next ? buildLevel(subset, next, level+1) : []
+        breadcrumb:[k], detailGroups: [],
+        children: next ? buildLevel(subset, next, level+1) : []
       };
     });
   }
   return buildLevel(list, startKey, 0);
+}
+
+function getContractSearchInput(){
+  return document.getElementById("busca");
+}
+
+function getContractSuggestPanel(){
+  return document.getElementById("contract-suggest");
+}
+
+function bindContractSuggestOutsideClick(){
+  if (contractSuggestDocBound) return;
+  const closeIfOutside = (event) => {
+    const wrap = document.querySelector(".card__search-autocomplete");
+    if (!wrap) return;
+    if (!wrap.contains(event.target)) closeContractSuggestions();
+  };
+  document.addEventListener("click", closeIfOutside);
+  window.addEventListener("resize", closeContractSuggestions);
+  document.addEventListener("scroll", closeContractSuggestions, true);
+  contractSuggestDocBound = true;
+}
+
+function wireContractSuggestionPanel(){
+  if (contractSuggestPanelBound) return;
+  const panel = getContractSuggestPanel();
+  if (!panel) return;
+  panel.addEventListener("pointerdown", (event) => {
+    const item = event.target.closest?.(".contract-suggest__item");
+    if (!item) return;
+    event.preventDefault();
+    const value = item.dataset.value || item.getAttribute("data-value") || item.textContent || "";
+    chooseContractSuggestion(value);
+  });
+  contractSuggestPanelBound = true;
+}
+
+function highlightContractTerm(text, term){
+  const value = String(text || "");
+  const lower = value.toLowerCase();
+  const needle = term.toLowerCase();
+  const idx = lower.indexOf(needle);
+  if (idx < 0) return escapeHTML(value);
+  const before = escapeHTML(value.slice(0, idx));
+  const match = escapeHTML(value.slice(idx, idx + term.length));
+  const after = escapeHTML(value.slice(idx + term.length));
+  return `${before}<mark>${match}</mark>${after}`;
+}
+
+function closeContractSuggestions(){
+  const panel = getContractSuggestPanel();
+  const input = getContractSearchInput();
+  if (panel) {
+    panel.hidden = true;
+    panel.innerHTML = "";
+  }
+  if (input) {
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  }
+  contractSuggestState.open = false;
+  contractSuggestState.items = [];
+  contractSuggestState.highlight = -1;
+}
+
+function setContractSuggestionHighlight(index){
+  const panel = getContractSuggestPanel();
+  const input = getContractSearchInput();
+  if (!panel || !contractSuggestState.open) return;
+  const items = panel.querySelectorAll(".contract-suggest__item");
+  if (!items.length) {
+    contractSuggestState.highlight = -1;
+    input?.removeAttribute("aria-activedescendant");
+    return;
+  }
+  let next = index;
+  if (next < 0) next = items.length - 1;
+  if (next >= items.length) next = 0;
+  contractSuggestState.highlight = next;
+  items.forEach((btn, i) => {
+    const highlighted = i === next;
+    btn.classList.toggle("is-highlight", highlighted);
+    btn.setAttribute("aria-selected", highlighted ? "true" : "false");
+    const id = `contract-opt-${i}`;
+    btn.id = id;
+    if (highlighted && input) {
+      input.setAttribute("aria-activedescendant", id);
+      const top = btn.offsetTop;
+      const bottom = top + btn.offsetHeight;
+      if (top < panel.scrollTop) panel.scrollTop = top;
+      else if (bottom > panel.scrollTop + panel.clientHeight) panel.scrollTop = bottom - panel.clientHeight;
+    }
+  });
+}
+
+function moveContractSuggestionHighlight(delta){
+  if (!contractSuggestState.open) return;
+  const panel = getContractSuggestPanel();
+  if (!panel || panel.hidden) return;
+  const items = panel.querySelectorAll(".contract-suggest__item");
+  if (!items.length) return;
+  const next = contractSuggestState.highlight + delta;
+  setContractSuggestionHighlight(next);
+}
+
+function getHighlightedContractSuggestion(){
+  if (!contractSuggestState.open) return null;
+  const idx = contractSuggestState.highlight;
+  if (idx < 0) return null;
+  return contractSuggestState.items[idx] || null;
+}
+
+function chooseContractSuggestion(value){
+  const input = getContractSearchInput();
+  const term = (value || "").trim();
+  if (input) {
+    input.value = term;
+    input.focus();
+  }
+  closeContractSuggestions();
+  requestAnimationFrame(() => {
+    if (term) commitContractSearch(term);
+    else commitContractSearch("", { showSpinner: false });
+  });
+}
+
+function refreshContractSuggestions(query = ""){
+  const input = getContractSearchInput();
+  const panel = getContractSuggestPanel();
+  if (!input || !panel) return;
+  bindContractSuggestOutsideClick();
+  wireContractSuggestionPanel();
+
+  const term = (query || "").trim();
+  contractSuggestState.term = term;
+  if (!term){
+    closeContractSuggestions();
+    return;
+  }
+
+  const list = Array.isArray(state.contractIndex) ? state.contractIndex : [];
+  const lowered = term.toLowerCase();
+  const matches = list.filter(id => id.toLowerCase().includes(lowered)).slice(0, 12);
+
+  if (!matches.length){
+    contractSuggestState.items = [];
+    contractSuggestState.highlight = -1;
+    contractSuggestState.open = true;
+    panel.innerHTML = `<div class="contract-suggest__empty">Nenhum contrato encontrado</div>`;
+    panel.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    input.removeAttribute("aria-activedescendant");
+    return;
+  }
+
+  contractSuggestState.items = matches;
+  contractSuggestState.highlight = -1;
+  contractSuggestState.open = true;
+  panel.innerHTML = matches.map((id, index) => `
+    <button type="button" class="contract-suggest__item" role="option" aria-selected="false" data-index="${index}" data-value="${escapeHTML(id)}">
+      <span>${highlightContractTerm(id, term)}</span>
+      <span class="contract-suggest__meta">Filtrar</span>
+    </button>
+  `).join("");
+  panel.hidden = false;
+  panel.scrollTop = 0;
+  input.setAttribute("aria-expanded", "true");
+  input.removeAttribute("aria-activedescendant");
+}
+
+function updateContractAutocomplete(){
+  const input = getContractSearchInput();
+  if (!input) return;
+  bindContractSuggestOutsideClick();
+  wireContractSuggestionPanel();
+
+  const ids = new Set();
+  (state._rankingRaw || []).forEach(row => {
+    ensureContracts(row).forEach(contract => {
+      if (contract?.id) ids.add(contract.id);
+    });
+  });
+
+  state.contractIndex = [...ids].sort();
+  if (input.value) refreshContractSuggestions(input.value);
+  else closeContractSuggestions();
+}
+
+function setContractSearchLoading(isLoading){
+  const wrap = document.querySelector(".card__search-autocomplete");
+  if (!wrap) return;
+  wrap.classList.toggle("is-loading", Boolean(isLoading));
+}
+
+async function commitContractSearch(rawTerm, opts = {}) {
+  const { showSpinner = true } = opts || {};
+  const term = (rawTerm || "").trim();
+
+  contractSuggestState.pending = term;
+  const run = async () => {
+    if (term) {
+      if (state.tableView !== "contrato") {
+        state.lastNonContractView = state.tableView;
+      }
+      state.tableView = "contrato";
+      setActiveChip("contrato");
+    } else if (state.tableView === "contrato") {
+      const fallback = state.lastNonContractView && state.lastNonContractView !== "contrato"
+        ? state.lastNonContractView
+        : "diretoria";
+      state.tableView = fallback;
+      setActiveChip(state.tableView);
+    }
+
+    state.tableSearchTerm = term;
+    closeContractSuggestions();
+    await Promise.resolve(applyFiltersAndRender());
+    if (!term) refreshContractSuggestions("");
+  };
+
+  const label = term ? "Filtrando contratos…" : "Atualizando tabela…";
+
+  if (showSpinner) {
+    await withSpinner(async () => {
+      setContractSearchLoading(true);
+      try {
+        await run();
+      } finally {
+        setContractSearchLoading(false);
+        contractSuggestState.pending = null;
+      }
+    }, label);
+  } else {
+    setContractSearchLoading(true);
+    try {
+      await run();
+    } finally {
+      setContractSearchLoading(false);
+      contractSuggestState.pending = null;
+    }
+  }
 }
 
 /* ===== UI ===== */
@@ -849,12 +1439,12 @@ function bindEvents() {
   $$(".tab").forEach(t => {
     t.addEventListener("click", () => {
       if (t.classList.contains("is-active")) return;
-      $$(".tab").forEach(x => x.classList.remove("is-active"));
-      t.classList.add("is-active");
       const view = t.dataset.view;
+      setActiveTab(view);
       if (view === "table") switchView("table");
       else if (view === "ranking") switchView("ranking");
       else if (view === "exec") switchView("exec");
+      else if (view === "campanhas") switchView("campanhas");
       else switchView("cards");
     });
   });
@@ -869,10 +1459,62 @@ function bindEvents() {
     });
   });
 
-  $("#busca")?.addEventListener("input", (e) => {
-    state.tableSearchTerm = (e.target.value || "").trim();
-    applyFiltersAndRender();
-  });
+  const searchInput = $("#busca");
+  if (searchInput) {
+    searchInput.addEventListener("input", async (e) => {
+      const value = e.target.value || "";
+      refreshContractSuggestions(value);
+      if (!value.trim() && state.tableSearchTerm) {
+        await commitContractSearch("", { showSpinner: false });
+      }
+    });
+    searchInput.addEventListener("keydown", async (e) => {
+      if (e.key === "ArrowDown") {
+        const value = e.currentTarget.value || "";
+        if (!contractSuggestState.open) refreshContractSuggestions(value);
+        if (contractSuggestState.open) moveContractSuggestionHighlight(1);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        const value = e.currentTarget.value || "";
+        if (!contractSuggestState.open) refreshContractSuggestions(value);
+        if (contractSuggestState.open) moveContractSuggestionHighlight(-1);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        const highlighted = getHighlightedContractSuggestion();
+        const value = highlighted ?? e.currentTarget.value;
+        await commitContractSearch(value);
+        return;
+      }
+      if (e.key === "Escape") {
+        closeContractSuggestions();
+      }
+    });
+    searchInput.addEventListener("change", async (e) => {
+      const value = e.target.value || "";
+      const term = (value || "").trim();
+      if (term === state.tableSearchTerm || term === contractSuggestState.pending) {
+        closeContractSuggestions();
+        return;
+      }
+      if (!term) {
+        await commitContractSearch("", { showSpinner: false });
+      } else {
+        await commitContractSearch(term);
+      }
+    });
+    searchInput.addEventListener("focus", (e) => {
+      const value = e.target.value || "";
+      if (value.trim()) refreshContractSuggestions(value);
+    });
+    searchInput.addEventListener("blur", () => {
+      setTimeout(() => closeContractSuggestions(), 120);
+    });
+  }
 
   $("#btn-export")?.remove();
 }
@@ -946,11 +1588,13 @@ function ensureChatWidget(){
     <button id="chat-launcher" class="chatw__btn" aria-label="Abrir chat de dúvidas">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8.4l-3.6 3a1 1 0 0 1-1.6-.8V6a2 2 0 0 1 2-2zm2 4v2h12V8H6zm0 4v2h9v-2H6z"/></svg>
     </button>
-    <section id="chat-panel" class="chatw__panel" aria-hidden="true" role="dialog" aria-label="Chat POBJ">
+    <section id="chat-panel" class="chatw__panel" aria-hidden="true" role="dialog" aria-label="Chat POBJ e campanhas">
       <header class="chatw__header">
-        <div class="chatw__title">Assistente POBJ</div>
+        <div class="chatw__title">Assistente POBJ &amp; Campanhas</div>
         <button id="chat-close" class="chatw__close" aria-label="Fechar chat"><i class="ti ti-x"></i></button>
       </header>
+
+      <p class="chatw__disclaimer">Assistente virtual com IA — respostas podem conter erros.</p>
 
       <div id="chat-body">
         <!-- Se modo iframe, eu coloco aqui; senão, uso a UI nativa abaixo -->
@@ -959,7 +1603,7 @@ function ensureChatWidget(){
       <div id="chat-ui-native" style="display:none;">
         <div id="chat-messages" class="chatw__msgs" aria-live="polite"></div>
         <form id="chat-form" class="chatw__form" autocomplete="off">
-          <input id="chat-input" type="text" placeholder="Pergunte sobre o POBJ…" required />
+          <input id="chat-input" type="text" placeholder="Pergunte sobre o POBJ ou campanhas…" required />
           <button id="chat-send" type="submit">Enviar</button>
         </form>
       </div>
@@ -1033,7 +1677,7 @@ function ensureChatWidget(){
     };
 
     // Mensagem de boas-vindas
-    addMsg("bot","Olá! Posso ajudar com dúvidas sobre o POBJ. O que você quer saber?");
+    addMsg("bot","Olá! Posso ajudar com dúvidas sobre o POBJ e campanhas. O que você quer saber?");
 
     form.addEventListener("submit", async (e)=>{
       e.preventDefault();
@@ -1083,16 +1727,20 @@ function ensureChatWidget(){
 /* ===== Troca de view (com spinner) ===== */
 async function switchView(next) {
   const label =
-    next === "table"   ? "Montando detalhamento…" :
-    next === "ranking" ? "Calculando ranking…"    :
-    next === "exec"    ? "Abrindo visão executiva…" :
-                         "Carregando…";
+    next === "table"     ? "Montando detalhamento…" :
+    next === "ranking"   ? "Calculando ranking…"    :
+    next === "exec"      ? "Abrindo visão executiva…" :
+    next === "campanhas" ? "Abrindo campanhas…" :
+                           "Carregando…";
+
+  setActiveTab(next);
 
   await withSpinner(async () => {
-    const views = { cards:"#view-cards", table:"#view-table", ranking:"#view-ranking", exec:"#view-exec" };
+    const views = { cards:"#view-cards", table:"#view-table", ranking:"#view-ranking", exec:"#view-exec", campanhas:"#view-campanhas" };
 
     if (next === "ranking" && !$("#view-ranking")) createRankingView();
     if (next === "exec") createExecutiveView();
+    if (next === "campanhas") ensureCampanhasView();
 
 
     Object.values(views).forEach(sel => $(sel)?.classList.add("hidden"));
@@ -1108,6 +1756,7 @@ async function switchView(next) {
 
     if (next === "ranking") renderRanking();
     if (next === "exec")    renderExecutiveView();   // <- ADICIONE ESTA LINHA
+    if (next === "campanhas") renderCampanhasView();
 
     const el = $(views[next]) || $("#view-cards");
     el.classList.remove("hidden");
@@ -1119,7 +1768,14 @@ async function switchView(next) {
 
 /* ===== Resumo (Indicadores / Pontos) ===== */
 function hitbarClass(p){ return p<50 ? "hitbar--low" : (p<100 ? "hitbar--warn" : "hitbar--ok"); }
-function renderResumoKPI(summary, visibleItemsHitCount, visiblePointsHit) {
+function renderResumoKPI(summary, context = {}) {
+  const {
+    visibleItemsHitCount = null,
+    visiblePointsHit = null,
+    visibleVarAtingido = null,
+    visibleVarMeta = null
+  } = context || {};
+
   let kpi = $("#kpi-summary");
   if (!kpi) {
     kpi = document.createElement("div");
@@ -1128,46 +1784,62 @@ function renderResumoKPI(summary, visibleItemsHitCount, visiblePointsHit) {
     $("#grid-familias").prepend(kpi);
   }
 
-  const pctInd = summary.indicadoresTotal
-    ? (visibleItemsHitCount / summary.indicadoresTotal)
-    : (summary.indicadoresPct || 0);
+  const indicadoresAtingidos = toNumber(summary.indicadoresAtingidos ?? visibleItemsHitCount ?? 0);
+  const indicadoresTotal = toNumber(summary.indicadoresTotal ?? 0);
+  const pontosAtingidos = toNumber(summary.pontosAtingidos ?? visiblePointsHit ?? 0);
+  const pontosTotal = toNumber(summary.pontosPossiveis ?? 0);
 
-  const pctPts = summary.pontosPossiveis
-    ? (visiblePointsHit / summary.pontosPossiveis)
-    : (summary.pontosPct || 0);
+  const varTotalBase = summary.varPossivel != null
+    ? toNumber(summary.varPossivel)
+    : (visibleVarMeta != null ? toNumber(visibleVarMeta) : Math.round((summary.pontosPossiveis || 0) * 1000));
+  const varAtingidoBase = summary.varAtingido != null
+    ? toNumber(summary.varAtingido)
+    : (visibleVarAtingido != null ? toNumber(visibleVarAtingido) : Math.round(varTotalBase * (summary.varPct || 0)));
 
-  const varPossivel = (summary.varPossivel != null)
-    ? summary.varPossivel
-    : Math.round((summary.pontosPossiveis || 0) * 1000);
+  const formatDisplay = (type, value) => type === "brl" ? formatBRLReadable(value) : formatIntReadable(value);
+  const formatFull = (type, value) => {
+    const n = Math.round(toNumber(value));
+    return type === "brl" ? fmtBRL.format(n) : fmtINT.format(n);
+  };
+  const buildTitle = (label, type, globalValue, visibleValue) => {
+    let title = `${label}: ${formatFull(type, globalValue)}`;
+    if (visibleValue != null && Math.round(toNumber(visibleValue)) !== Math.round(toNumber(globalValue))) {
+      title += ` · Filtro atual: ${formatFull(type, visibleValue)}`;
+    }
+    return title;
+  };
 
-  const varAtingido = (summary.varAtingido != null)
-    ? summary.varAtingido
-    : Math.round(varPossivel * pctPts);
-
-  const pctVar = varPossivel ? (varAtingido / varPossivel) : 0;
-
-  const f = { int:v=>fmtINT.format(v), brl:v=>fmtBRL.format(Math.round(v||0)) };
-
-  const strip = (titulo, iconClass, atingidos, possiveis, pct, fmtType="int") => {
-    const pct100 = Math.min(100, Math.max(0, pct * 100));
-    const hbClass = pct100 < 50 ? "hitbar--low" : (pct100 < 100 ? "hitbar--warn" : "hitbar--ok");
+  const buildCard = (titulo, iconClass, atingidos, total, fmtType, visibleAting = null, visibleTotal = null) => {
+    const pctRaw = total ? (atingidos / total) * 100 : 0;
+    const pct100 = Math.max(0, Math.min(100, pctRaw));
+    const hbClass = hitbarClass(pctRaw);
+    const pctLabel = `${pctRaw.toFixed(1)}%`;
+    const atgTitle = buildTitle("Atingidos", fmtType, atingidos, visibleAting);
+    const totTitle = buildTitle("Total", fmtType, total, visibleTotal);
     return `
-      <div class="kpi-pill kpi-strip">
-        <span class="kpi-icon"><i class="${iconClass}"></i></span>
-        <span class="kpi-strip__label has-ellipsis" title="${titulo}">${titulo}</span>
-        <span class="kpi-stat has-ellipsis" title="Atingidos: ${f[fmtType](atingidos)}">Atg: <strong title="${f[fmtType](atingidos)}">${f[fmtType](atingidos)}</strong></span>
-        <span class="kpi-stat has-ellipsis" title="Total: ${f[fmtType](possiveis)}">Total: <strong title="${f[fmtType](possiveis)}">${f[fmtType](possiveis)}</strong></span>
-        <span class="hitbar ${hbClass}">
+      <div class="kpi-pill">
+        <div class="kpi-strip__main">
+          <span class="kpi-icon"><i class="${iconClass}"></i></span>
+          <div class="kpi-strip__text">
+            <span class="kpi-strip__label" title="${titulo}">${titulo}</span>
+            <div class="kpi-strip__stats">
+              <span class="kpi-stat" title="${atgTitle}">Atg: <strong>${formatDisplay(fmtType, atingidos)}</strong></span>
+              <span class="kpi-stat" title="${totTitle}">Total: <strong>${formatDisplay(fmtType, total)}</strong></span>
+            </div>
+          </div>
+        </div>
+        <div class="hitbar ${hbClass}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct100.toFixed(1)}" aria-valuetext="${titulo}: ${pctLabel}">
           <span class="hitbar__track"><span class="hitbar__fill" style="width:${pct100}%"></span></span>
-          <strong title="${pct100.toFixed(1)}%">${pct100.toFixed(1)}%</strong>
-        </span>
+          <strong title="${pctLabel}">${pctLabel}</strong>
+        </div>
       </div>`;
   };
 
-  kpi.innerHTML =
-    strip("Indicadores", "ti ti-list-check", visibleItemsHitCount, summary.indicadoresTotal || 0, pctInd, "int") +
-    strip("Pontos",       "ti ti-medal",      visiblePointsHit,     summary.pontosPossiveis   || 0, pctPts, "int") +
-    strip("Variável",     "ti ti-cash",       varAtingido,          varPossivel,                  pctVar, "brl");
+  kpi.innerHTML = [
+    buildCard("Indicadores", "ti ti-list-check", indicadoresAtingidos, indicadoresTotal, "int", visibleItemsHitCount),
+    buildCard("Pontos", "ti ti-medal", pontosAtingidos, pontosTotal, "int", visiblePointsHit),
+    buildCard("Variável", "ti ti-cash", varAtingidoBase, varTotalBase, "brl", visibleVarAtingido, visibleVarMeta)
+  ].join("");
 }
 
 /* ===== Tooltip dos cards ===== */
@@ -1271,6 +1943,9 @@ function renderFamilias(sections, summary){
 
   let atingidosVisiveis = 0;
   let pontosAtingidosVisiveis = 0;
+  let varRealVisiveis = 0;
+  let varMetaVisiveis = 0;
+  let hasVisibleVar = false;
 
   const kpiHolder = document.createElement("div");
   kpiHolder.id = "kpi-summary";
@@ -1292,6 +1967,17 @@ function renderFamilias(sections, summary){
 
     const sectionTotalPoints = sec.items.reduce((acc,i)=> acc + (i.peso||0), 0);
     const sectionPointsHit   = sec.items.filter(i=> i.atingido).reduce((acc,i)=> acc + (i.peso||0), 0);
+    const sectionVarMeta     = sec.items.reduce((acc,i)=> acc + (i.variavelMeta || 0), 0);
+    const sectionVarReal     = sec.items.reduce((acc,i)=> acc + (i.variavelReal || 0), 0);
+
+    const sectionPointsHitDisp = formatIntReadable(sectionPointsHit);
+    const sectionPointsTotalDisp = formatIntReadable(sectionTotalPoints);
+    const sectionPointsHitFull = fmtINT.format(Math.round(sectionPointsHit));
+    const sectionPointsTotalFull = fmtINT.format(Math.round(sectionTotalPoints));
+    const sectionVarRealDisp = formatBRLReadable(sectionVarReal);
+    const sectionVarMetaDisp = formatBRLReadable(sectionVarMeta);
+    const sectionVarRealFull = fmtBRL.format(Math.round(sectionVarReal));
+    const sectionVarMetaFull = fmtBRL.format(Math.round(sectionVarMeta));
 
     const sectionEl = document.createElement("section");
     sectionEl.className = "fam-section";
@@ -1300,7 +1986,10 @@ function renderFamilias(sections, summary){
       <header class="fam-section__header">
         <div class="fam-section__title">
           <span>${sec.label}</span>
-          <small class="fam-section__meta">pontos: ${fmtINT.format(sectionPointsHit)}/${fmtINT.format(sectionTotalPoints)}</small>
+          <small class="fam-section__meta">
+            <span class="fam-section__meta-item" title="Pontos: ${sectionPointsHitFull} / ${sectionPointsTotalFull}">Pontos: ${sectionPointsHitDisp} / ${sectionPointsTotalDisp}</span>
+            <span class="fam-section__meta-item" title="Variável: ${sectionVarRealFull} / ${sectionVarMetaFull}">Variável: ${sectionVarRealDisp} / ${sectionVarMetaDisp}</span>
+          </small>
         </div>
       </header>
       <div class="fam-section__grid"></div>`;
@@ -1313,8 +2002,24 @@ function renderFamilias(sections, summary){
       const badgeTxt   = pct >= 100 ? `${Math.round(pct)}%` : `${pct.toFixed(1)}%`;
       const narrowStyle= badgeTxt.length >= 5 ? 'style="font-size:11px"' : '';
 
+      const variavelMeta = f.variavelMeta || 0;
+      const variavelReal = f.variavelReal || 0;
+      hasVisibleVar = true;
+      varMetaVisiveis += variavelMeta;
+      varRealVisiveis += variavelReal;
+      const varRatio = variavelMeta ? (variavelReal / variavelMeta) : (f.atingVariavel ?? f.ating ?? 0);
+      const varPct = Math.max(0, varRatio * 100);
+      const varPctLabel = `${varPct.toFixed(1)}%`;
+      const varFillPct = Math.max(0, Math.min(100, varPct));
+      const varTrackClass = varPct < 50 ? "var--low" : (varPct < 100 ? "var--warn" : "var--ok");
+      const varRealCompact = formatCompactBRL(variavelReal);
+      const varMetaCompact = formatCompactBRL(variavelMeta);
+      const varAccessible = `${varPctLabel} (${fmtBRL.format(Math.round(variavelReal))} de ${fmtBRL.format(Math.round(variavelMeta))})`;
+
       const realizadoTxt = formatByMetric(f.metric, f.realizado);
       const metaTxt      = formatByMetric(f.metric, f.meta);
+      const realizadoFull = formatMetricFull(f.metric, f.realizado);
+      const metaFull      = formatMetricFull(f.metric, f.meta);
 
       grid.insertAdjacentHTML("beforeend", `
         <article class="prod-card" tabindex="0" data-prod-id="${f.id}">
@@ -1331,8 +2036,20 @@ function renderFamilias(sections, summary){
           </div>
 
           <div class="prod-card__kpis">
-            <div class="kv"><small>Realizado</small><strong class="has-ellipsis" title="${realizadoTxt}">${realizadoTxt}</strong></div>
-            <div class="kv"><small>Meta</small><strong class="has-ellipsis" title="${metaTxt}">${metaTxt}</strong></div>
+            <div class="kv"><small>Realizado</small><strong class="has-ellipsis" title="${realizadoFull}">${realizadoTxt}</strong></div>
+            <div class="kv"><small>Meta</small><strong class="has-ellipsis" title="${metaFull}">${metaTxt}</strong></div>
+          </div>
+
+          <div class="prod-card__var">
+            <div class="prod-card__var-head">
+              <small>Remuneração variável</small>
+              <strong title="${varPctLabel}">${varPctLabel}</strong>
+            </div>
+            <div class="prod-card__var-track ${varTrackClass}" role="progressbar" aria-valuemin="0" aria-valuemax="150" aria-valuenow="${Math.round(Math.min(varPct,150))}" aria-valuetext="${varAccessible}" aria-label="Atingimento da remuneração variável">
+              <span class="prod-card__var-fill" style="width:${varFillPct}%"></span>
+              <span class="prod-card__var-label prod-card__var-label--current" title="${fmtBRL.format(Math.round(variavelReal))}">${varRealCompact}</span>
+              <span class="prod-card__var-label prod-card__var-label--target" title="${fmtBRL.format(Math.round(variavelMeta))}">${varMetaCompact}</span>
+            </div>
           </div>
 
           <div class="prod-card__foot">Atualizado em ${f.ultimaAtualizacao}</div>
@@ -1344,7 +2061,12 @@ function renderFamilias(sections, summary){
     host.appendChild(sectionEl);
   });
 
-  renderResumoKPI(summary, atingidosVisiveis, pontosAtingidosVisiveis);
+  renderResumoKPI(summary, {
+    visibleItemsHitCount: atingidosVisiveis,
+    visiblePointsHit: pontosAtingidosVisiveis,
+    visibleVarAtingido: hasVisibleVar ? varRealVisiveis : null,
+    visibleVarMeta: hasVisibleVar ? varMetaVisiveis : null
+  });
 
   $$(".prod-card").forEach(card=>{
     const tip = card.querySelector(".kpi-tip");
@@ -1403,14 +2125,16 @@ function ensureExecStyles(){
     .exec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
     .seg-mini.segmented{padding:2px;border-radius:8px}
     .seg-mini .seg-btn{padding:6px 8px;font-size:12px}
-    .exec-chart{background:#fff;border:1px solid var(--stroke);border-radius:14px;box-shadow:var(--shadow);padding:12px}
-    .chart{width:100%;overflow:hidden}
+    .exec-chart{background:#fff;border:1px solid var(--stroke);border-radius:14px;box-shadow:var(--shadow);padding:20px;margin-bottom:20px}
+    .chart{width:100%;overflow:hidden;padding:20px;border-radius:12px;background:#fff}
     .chart svg{display:block;width:100%;height:auto}
     .chart-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
     .legend-item{display:inline-flex;align-items:center;gap:6px;color:#475569;font-weight:700}
     .legend-swatch{width:14px;height:6px;border-radius:999px;background:#cbd5e1;border:1px solid #94a3b8}
     .legend-swatch--meta{background:#93c5fd;border-color:#60a5fa}
     .legend-swatch--real{background:#86efac;border-color:#4ade80}
+    .legend-swatch--monthly-meta{background:transparent;border:1.5px dashed #2563eb;height:8px}
+    .legend-swatch--monthly-real{background:#2563eb;border-color:#1d4ed8;height:8px}
     .legend-swatch--bars{background:#e5e7eb;border-color:#cbd5e1;height:10px}
     .exec-panel .exec-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
   `;
@@ -1421,103 +2145,50 @@ function ensureExecStyles(){
 function createExecutiveView(){
   ensureExecStyles();
 
-  let host = document.getElementById("view-exec");
-  if(!host){
-    host = document.createElement("section");
-    host.id = "view-exec";
-    host.className = "hidden view-panel";
-    document.querySelector(".container")?.appendChild(host);
+  const host = document.getElementById("view-exec");
+  if (!host) return;
+
+  if (!state.exec) {
+    state.exec = { rankMode: "top", statusMode: "quase", chartMode: "diario" };
   }
+  state.exec.rankMode  = state.exec.rankMode  || "top";
+  state.exec.statusMode= state.exec.statusMode|| "quase";
+  state.exec.chartMode = state.exec.chartMode || "diario";
 
-  // se já montei, não refaço o DOM (só re-renderizo os dados)
-  if (host.querySelector("#exec-kpis")) return;
-
-  host.innerHTML = `
-    <section class="card card--exec">
-      <header class="card__header exec-head">
-        <div class="title-subtitle">
-          <!-- sem título -->
-          <div class="muted" id="exec-context"></div>
-        </div>
-      </header>
-
-      <!-- KPIs topo -->
-      <div id="exec-kpis" class="exec-kpis"></div>
-
-      <!-- Gráfico de evolução -->
-      <section class="exec-panel exec-span-2 exec-chart">
-        <div class="exec-h"><span id="exec-chart-title">Evolução do mês</span></div>
-        <div id="exec-chart" class="chart" role="img" aria-label="Evolução diária com linhas de meta e realizado"></div>
-        <div class="chart-legend">
-          <span class="legend-item"><span class="legend-swatch legend-swatch--bars"></span>Diário realizado (barras)</span>
-          <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado acumulado (linha)</span>
-          <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta acumulada (linha)</span>
-        </div>
-      </section>
-
-      <div class="exec-grid">
-        <!-- Painel de ranking com toggle Top/Bottom -->
-        <section class="exec-panel" id="exec-rank-panel">
-          <div class="exec-h">
-            <span id="exec-rank-title">Desempenho por unidade</span>
-            <div class="segmented seg-mini" role="tablist" aria-label="Ordenação">
-              <button type="button" class="seg-btn is-active" data-rk="top">Top 5</button>
-              <button type="button" class="seg-btn" data-rk="bottom">Bottom 5</button>
-            </div>
-          </div>
-          <div id="exec-rank" class="rank-mini"></div>
-        </section>
-
-        <!-- Painel de status com 3 visões -->
-        <section class="exec-panel" id="exec-status-panel">
-          <div class="exec-h">
-            <span id="exec-status-title">Status das unidades</span>
-            <div class="segmented seg-mini" role="tablist" aria-label="Status">
-              <button type="button" class="seg-btn" data-st="hit">Atingidas</button>
-              <button type="button" class="seg-btn is-active" data-st="quase">Quase lá</button>
-              <button type="button" class="seg-btn" data-st="longe">Longe</button>
-            </div>
-          </div>
-          <div id="exec-status-list" class="list-mini"></div>
-        </section>
-
-        <section class="exec-panel exec-span-2">
-          <h4 class="exec-h"><span id="exec-ritmo-title">Ritmo do mês</span></h4>
-          <div id="exec-ritmo" class="ritmo"></div>
-        </section>
-
-        <section class="exec-panel exec-span-2">
-          <h4 class="exec-h"><span id="exec-heatmap-title">Heatmap</span></h4>
-          <div id="exec-heatmap" class="hm"></div>
-        </section>
-      </div>
-    </section>`;
-
-  // estado local da executiva
-  if (!state.exec) state.exec = { rankMode: "top", statusMode: "quase" };
-
-  // listeners dos segmented da executiva
-  host.querySelectorAll('#exec-rank-panel .seg-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      host.querySelectorAll('#exec-rank-panel .seg-btn').forEach(x=>x.classList.remove('is-active'));
-      b.classList.add('is-active');
-      state.exec.rankMode = b.dataset.rk; // "top" | "bottom"
-      if (state.activeView==='exec') renderExecutiveView();
+  const syncSegmented = (containerSelector, dataAttr, stateKey, fallback) => {
+    const container = host.querySelector(containerSelector);
+    if (!container) return;
+    const buttons = container.querySelectorAll('.seg-btn');
+    if (!buttons.length) return;
+    const active = state.exec[stateKey] || fallback;
+    buttons.forEach(btn => {
+      const value = btn.dataset[dataAttr] || fallback;
+      btn.classList.toggle('is-active', value === active);
+      if (!btn.dataset.execBound) {
+        btn.dataset.execBound = 'true';
+        btn.addEventListener('click', () => {
+          state.exec[stateKey] = value;
+          buttons.forEach(b => b.classList.toggle('is-active', b === btn));
+          if (state.activeView === 'exec') renderExecutiveView();
+        });
+      }
     });
-  });
-  host.querySelectorAll('#exec-status-panel .seg-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      host.querySelectorAll('#exec-status-panel .seg-btn').forEach(x=>x.classList.remove('is-active'));
-      b.classList.add('is-active');
-      state.exec.statusMode = b.dataset.st; // "hit" | "quase" | "longe"
-      if (state.activeView==='exec') renderExecutiveView();
-    });
-  });
+  };
 
-  // filtros disparando re-render quando a aba executiva estiver aberta
-  const execSel = ["#f-segmento","#f-diretoria","#f-gerencia","#f-agencia","#f-ggestao","#f-gerente","#f-familia","#f-subproduto","#f-status-kpi"];
-  execSel.forEach(sel => $(sel)?.addEventListener("change", ()=>{ if (state.activeView==='exec') renderExecutiveView(); }));
-  $("#btn-consultar")?.addEventListener("click", ()=>{ if (state.activeView==='exec') renderExecutiveView(); });
+  syncSegmented('#exec-rank-panel', 'rk', 'rankMode', 'top');
+  syncSegmented('#exec-status-panel', 'st', 'statusMode', 'quase');
+  syncSegmented('#exec-chart-toggle', 'chart', 'chartMode', 'diario');
+
+  if (!host.dataset.execFiltersBound) {
+    const execSel = ["#f-segmento","#f-diretoria","#f-gerencia","#f-agencia","#f-ggestao","#f-gerente","#f-familia","#f-subproduto","#f-status-kpi"];
+    execSel.forEach(sel => $(sel)?.addEventListener("change", () => {
+      if (state.activeView === 'exec') renderExecutiveView();
+    }));
+    $("#btn-consultar")?.addEventListener("click", () => {
+      if (state.activeView === 'exec') renderExecutiveView();
+    });
+    host.dataset.execFiltersBound = "true";
+  }
 }
 
 /* Helpers de agregação para a Visão Executiva */
@@ -1599,12 +2270,20 @@ function makeDailySeries(totalMeta, totalReal, startISO, endISO){
   const labels = days.map(d=> String(d.getUTCDate()).padStart(2,"0"));
   return { labels, dailyReal, cumMeta, cumReal };
 }
+
+function chartDimensions(container, fallbackW=900, fallbackH=260){
+  if (!container) return { width: fallbackW, height: fallbackH };
+  const styles = window.getComputedStyle(container);
+  const padL = parseFloat(styles.paddingLeft) || 0;
+  const padR = parseFloat(styles.paddingRight) || 0;
+  const width = Math.max(320, (container.clientWidth || fallbackW) - padL - padR);
+  return { width, height: fallbackH };
+}
 function buildExecChart(container, series){
-  const W = container.clientWidth || 900;
-  const H = 260;
-  const m = { t:18, r:18, b:26, l:52 };
-  const iw = W - m.l - m.r;
-  const ih = H - m.t - m.b;
+  const { width: W, height: H } = chartDimensions(container);
+  const m = { t:20, r:20, b:40, l:64 };
+  const iw = Math.max(0, W - m.l - m.r);
+  const ih = Math.max(0, H - m.t - m.b);
 
   const n = series.labels.length;
   const maxY = Math.max(...series.cumMeta, ...series.cumReal) * 1.10 || 1;
@@ -1614,11 +2293,13 @@ function buildExecChart(container, series){
 
   const barW = Math.max(2, iw / (n*1.6));
 
+  const axisY = H - m.b;
+
   // grid Y
   const gy = [];
   for(let k=0;k<=4;k++){
     const val = (maxY/4)*k;
-    gy.push({ y: y(val), label: fmtBRL.format(Math.round(val)) });
+    gy.push({ y: y(val), label: formatBRLReadable(val) });
   }
 
   const path = (arr)=> arr.map((v,i)=> `${i?"L":"M"} ${x(i)} ${y(v)}`).join(" ");
@@ -1629,10 +2310,9 @@ function buildExecChart(container, series){
   const lineReal = `<path d="${path(series.cumReal)}" fill="none" stroke="#22c55e" stroke-width="2.5" />`;
   const lineMeta = `<path d="${path(series.cumMeta)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-dasharray="6 6" />`;
 
-  const pickIdx = (i)=> Math.min(n-1, Math.max(0, i));
-  const ticksX = [0, Math.floor(n*0.33), Math.floor(n*0.66), n-1].map(pickIdx);
-  const xlabels = [...new Set(ticksX)].map(i => 
-    `<text x="${x(i)}" y="${H-6}" font-size="10" text-anchor="middle" fill="#6b7280">${series.labels[i]}</text>`).join("");
+  const xlabels = series.labels.map((lab,i) =>
+    `<text x="${x(i)}" y="${axisY + 16}" font-size="9" text-anchor="middle" fill="#6b7280">${lab}</text>`
+  ).join("");
 
   const gridY = gy.map(g => 
     `<line x1="${m.l}" y1="${g.y}" x2="${W-m.r}" y2="${g.y}" stroke="#eef2f7"/>
@@ -1646,6 +2326,146 @@ function buildExecChart(container, series){
       ${bars}
       ${lineMeta}
       ${lineReal}
+      <line x1="${m.l}" y1="${axisY}" x2="${W-m.r}" y2="${axisY}" stroke="#e5e7eb"/>
+      ${xlabels}
+    </svg>`;
+}
+
+function monthKeyLabel(key){
+  if (!key) return "—";
+  const [y,m] = key.split('-');
+  const year = Number(y);
+  const month = Number(m);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return key;
+  const dt = new Date(Date.UTC(year, month - 1, 1));
+  return dt.toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "");
+}
+
+function monthKeyFromDate(dt){
+  if (!(dt instanceof Date) || Number.isNaN(dt)) return "";
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function normalizeMonthKey(value){
+  if (!value) return "";
+  if (value instanceof Date) return monthKeyFromDate(value);
+  if (typeof value === "string") {
+    const cleaned = value.trim().replace(/[\\/]/g, "-");
+    const match = cleaned.match(/^(\d{4})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}`;
+  }
+  return "";
+}
+
+function makeMonthlySeries(rows, period){
+  const startISO = period?.start || todayISO();
+  const endISO = period?.end || startISO;
+
+  let startDate = dateUTCFromISO(startISO);
+  let endDate = dateUTCFromISO(endISO);
+  if (!startDate) startDate = dateUTCFromISO(todayISO());
+  if (!endDate) endDate = startDate;
+  if (startDate > endDate) [startDate, endDate] = [endDate, startDate];
+
+  const monthStart = new Date(startDate);
+  monthStart.setUTCDate(1);
+  const monthEnd = new Date(endDate);
+  monthEnd.setUTCDate(1);
+
+  const monthKeys = [];
+  const cursor = new Date(monthStart);
+  while (cursor <= monthEnd) {
+    monthKeys.push(monthKeyFromDate(cursor));
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  const fallbackKey = monthKeys[0] || normalizeMonthKey(startISO) || normalizeMonthKey(todayISO()) || "";
+  if (!monthKeys.length && fallbackKey) monthKeys.push(fallbackKey);
+
+  const firstKey = monthKeys[0];
+  const lastKey = monthKeys[monthKeys.length - 1] || firstKey;
+  const buckets = new Map(monthKeys.map(key => [key, { meta:0, real:0 }]));
+
+  rows.forEach(r => {
+    const rawDate = r?.competencia || r?.mes || r?.data || r?.dataReferencia || r?.dt;
+    let key = normalizeMonthKey(rawDate);
+
+    if (!key && rawDate instanceof Date) {
+      key = monthKeyFromDate(rawDate);
+    }
+
+    if (!key && typeof rawDate === "string") {
+      const isoCandidate = rawDate.length >= 10 ? rawDate.slice(0, 10) : rawDate.length >= 7 ? `${rawDate.slice(0,7)}-01` : "";
+      key = normalizeMonthKey(isoCandidate);
+    }
+
+    if (!key) key = fallbackKey;
+    if (!key) return;
+
+    if (firstKey && key < firstKey) return;
+    if (lastKey && key > lastKey) return;
+
+    if (!buckets.has(key)) buckets.set(key, { meta:0, real:0 });
+    const agg = buckets.get(key);
+    agg.meta += (r.meta_mens ?? r.meta ?? 0);
+    agg.real += (r.real_mens ?? r.realizado ?? 0);
+  });
+
+  const ordered = [...buckets.entries()].sort((a,b)=> a[0].localeCompare(b[0]));
+  return {
+    labels: ordered.map(([key])=> monthKeyLabel(key)),
+    meta:   ordered.map(([,v])=> v.meta),
+    real:   ordered.map(([,v])=> v.real)
+  };
+}
+
+function buildExecMonthlyChart(container, series){
+  const { width: W, height: H } = chartDimensions(container);
+  const m = { t:20, r:20, b:42, l:64 };
+  const iw = Math.max(0, W - m.l - m.r);
+  const ih = Math.max(0, H - m.t - m.b);
+  const maxY = Math.max(...series.meta, ...series.real) * 1.1 || 1;
+  const n = series.labels.length;
+  const band = iw / Math.max(1, n);
+  const gap = Math.min(18, band * 0.25);
+  const barW = Math.max(18, band - gap);
+  const realW = Math.max(10, barW * 0.6);
+  const offset = (barW - realW) / 2;
+
+  const xBase = i => m.l + band * i + gap/2;
+  const y = v => m.t + ih - (v / maxY) * ih;
+
+  const baseColor = "#2563eb";
+  const barsMeta = series.meta.map((v,i)=> {
+    const height = Math.max(0, y(0) - y(v));
+    return `<rect x="${xBase(i)}" y="${y(v)}" width="${barW}" height="${height}" fill="none" stroke="${baseColor}" stroke-width="1.6" stroke-dasharray="4 3" stroke-opacity="0.7" rx="2"/>`;
+  }).join("");
+  const barsReal = series.real.map((v,i)=> {
+    const height = Math.max(0, y(0) - y(v));
+    return `<rect x="${xBase(i)+offset}" y="${y(v)}" width="${realW}" height="${height}" fill="${baseColor}" fill-opacity="0.7" stroke="${baseColor}" stroke-width="1.4" rx="2"/>`;
+  }).join("");
+
+  const gy = [];
+  for(let k=0;k<=4;k++){
+    const val = (maxY/4)*k;
+    gy.push({ y: y(val), label: formatBRLReadable(val) });
+  }
+
+  const gridY = gy.map(g =>
+    `<line x1="${m.l}" y1="${g.y}" x2="${W-m.r}" y2="${g.y}" stroke="#eef2f7"/>
+     <text x="${m.l-6}" y="${g.y+3}" font-size="10" text-anchor="end" fill="#6b7280">${g.label}</text>`
+  ).join("");
+
+  const xlabels = series.labels.map((lab,i)=> {
+    const cx = m.l + band * i + band/2;
+    return `<text x="${cx}" y="${H-6}" font-size="10" text-anchor="middle" fill="#6b7280">${lab}</text>`;
+  }).join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="barras mensais de meta e realizado">
+      <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
+      ${gridY}
+      ${barsMeta}
+      ${barsReal}
       <line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" stroke="#e5e7eb"/>
       ${xlabels}
     </svg>`;
@@ -1659,9 +2479,11 @@ function renderExecutiveView(){
   const ctx    = document.getElementById("exec-context");
   const kpis   = document.getElementById("exec-kpis");
   const chartC = document.getElementById("exec-chart");
+  const chartTitleEl = document.getElementById("exec-chart-title");
+  const chartLegend = document.getElementById("exec-chart-legend");
+  const chartToggle = document.getElementById("exec-chart-toggle");
   const hm     = document.getElementById("exec-heatmap");
   const rankEl = document.getElementById("exec-rank");
-  const ritmo  = document.getElementById("exec-ritmo");
   const statusList = document.getElementById("exec-status-list");
 
   if (!Array.isArray(state._rankingRaw) || !state._rankingRaw.length){
@@ -1671,6 +2493,14 @@ function renderExecutiveView(){
 
   // base com TODOS os filtros aplicados
   const rowsBase = filterRows(state._rankingRaw);
+
+  const chartMode = state.exec?.chartMode || "diario";
+  if (chartToggle){
+    chartToggle.querySelectorAll('.seg-btn').forEach(btn=>{
+      const mode = btn.dataset.chart || "diario";
+      btn.classList.toggle('is-active', mode === chartMode);
+    });
+  }
 
   // nível inicial
   const start = execStartLevelFromFilters();
@@ -1712,10 +2542,19 @@ function renderExecutiveView(){
   const forecastPct    = total.meta_mens ? (forecast/total.meta_mens)*100 : 0;
 
   if (kpis){
+    const realMensFull = fmtBRL.format(Math.round(total.real_mens));
+    const realMensDisplay = formatBRLReadable(total.real_mens);
+    const metaMensFull = fmtBRL.format(Math.round(total.meta_mens));
+    const metaMensDisplay = formatBRLReadable(total.meta_mens);
+    const defasFull = fmtBRL.format(Math.round(defas));
+    const defasDisplay = formatBRLReadable(defas);
+    const forecastFull = fmtBRL.format(Math.round(forecast));
+    const forecastDisplay = formatBRLReadable(forecast);
+
     kpis.innerHTML = `
       <div class="kpi-card">
         <div class="kpi-card__title">Atingimento mensal</div>
-        <div class="kpi-card__value">${fmtBRL.format(total.real_mens)} <small>/ ${fmtBRL.format(total.meta_mens)}</small></div>
+        <div class="kpi-card__value"><span title="${realMensFull}">${realMensDisplay}</span> <small>/ <span title="${metaMensFull}">${metaMensDisplay}</span></small></div>
         <div class="kpi-card__bar">
           <div class="kpi-card__fill ${pctBadgeCls(ating*100)}" style="width:${Math.min(100, Math.max(0, ating*100))}%"></div>
         </div>
@@ -1724,13 +2563,13 @@ function renderExecutiveView(){
 
       <div class="kpi-card">
         <div class="kpi-card__title">Defasagem do mês</div>
-        <div class="kpi-card__value ${moneyBadgeCls(defas)}">${fmtBRL.format(defas)}</div>
+        <div class="kpi-card__value ${moneyBadgeCls(defas)}" title="${defasFull}">${defasDisplay}</div>
         <div class="kpi-sub muted">Real – Meta (mês)</div>
       </div>
 
       <div class="kpi-card">
         <div class="kpi-card__title">Forecast x Meta</div>
-        <div class="kpi-card__value">${fmtBRL.format(Math.round(forecast))} <small>/ ${fmtBRL.format(total.meta_mens)}</small></div>
+        <div class="kpi-card__value"><span title="${forecastFull}">${forecastDisplay}</span> <small>/ <span title="${metaMensFull}">${metaMensDisplay}</span></small></div>
         <div class="kpi-card__bar">
           <div class="kpi-card__fill ${pctBadgeCls(forecastPct)}" style="width:${Math.min(100, Math.max(0, forecastPct))}%"></div>
         </div>
@@ -1740,8 +2579,36 @@ function renderExecutiveView(){
 
   // Gráfico
   if (chartC){
-    const series = makeDailySeries(total.meta_mens, total.real_mens, state.period.start, state.period.end);
-    buildExecChart(chartC, series);
+    const renderChart = () => {
+      const mode = state.exec?.chartMode || "diario";
+      if (mode === "mensal"){
+        const monthlySeries = makeMonthlySeries(rowsBase, state.period);
+        buildExecMonthlyChart(chartC, monthlySeries);
+        chartC.setAttribute("aria-label", "Comparativo mensal de meta e realizado em barras azuis");
+        if (chartTitleEl) chartTitleEl.textContent = "Evolução mensal";
+        if (chartLegend){
+          chartLegend.innerHTML = `
+            <span class="legend-item"><span class="legend-swatch legend-swatch--monthly-meta"></span>Meta mensal (contorno)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--monthly-real"></span>Realizado mensal (barra)</span>
+          `;
+        }
+      } else {
+        const dailySeries = makeDailySeries(total.meta_mens, total.real_mens, state.period.start, state.period.end);
+        buildExecChart(chartC, dailySeries);
+        chartC.setAttribute("aria-label", "Evolução diária com linhas de meta e realizado");
+        if (chartTitleEl) chartTitleEl.textContent = "Evolução do mês";
+        if (chartLegend){
+          chartLegend.innerHTML = `
+            <span class="legend-item"><span class="legend-swatch legend-swatch--bars"></span>Diário realizado (barras)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado acumulado (linha)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta acumulada (linha)</span>
+          `;
+        }
+      }
+    };
+
+    renderChart();
+    host.__execChartRender = renderChart;
 
     // redimensiona enquanto essa aba estiver ativa
     if (!host.__execResize){
@@ -1749,7 +2616,8 @@ function renderExecutiveView(){
       host.__execResize = () => {
         if (state.activeView !== 'exec') return;
         if (raf) cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(()=> buildExecChart(chartC, series));
+        const fn = host.__execChartRender;
+        raf = requestAnimationFrame(()=> fn && fn());
       };
       window.addEventListener('resize', host.__execResize);
     }
@@ -1757,14 +2625,19 @@ function renderExecutiveView(){
 
   // Ranking Top/Bottom para o nível atual
   const grouped = execAggBy(rowsBase, startKey).sort((a,b)=> b.p_mens - a.p_mens);
-  const renderRankRows = (arr)=> arr.map(r=>`
+  const renderRankRows = (arr)=> arr.map(r=>{
+    const realFull = fmtBRL.format(Math.round(r.real_mens));
+    const realDisplay = formatBRLReadable(r.real_mens);
+    const metaFull = fmtBRL.format(Math.round(r.meta_mens));
+    const metaDisplay = formatBRLReadable(r.meta_mens);
+    return `
     <div class="rank-mini__row" data-key="${r.key}">
       <div class="rank-mini__name">${r.key}</div>
       <div class="rank-mini__bar"><span style="width:${Math.min(100,Math.max(0,r.p_mens))}%"></span></div>
       <div class="rank-mini__pct"><span class="att-badge ${pctBadgeCls(r.p_mens)}">${r.p_mens.toFixed(1)}%</span></div>
-      <div class="rank-mini__vals"><strong>${fmtBRL.format(r.real_mens)}</strong> <small>/ ${fmtBRL.format(r.meta_mens)}</small></div>
-    </div>
-  `).join("");
+      <div class="rank-mini__vals"><strong title="${realFull}">${realDisplay}</strong> <small title="${metaFull}">/ ${metaDisplay}</small></div>
+    </div>`;
+  }).join("");
 
   if (rankEl){
     if (state.exec.rankMode === "bottom"){
@@ -1794,27 +2667,6 @@ function renderExecutiveView(){
         document.querySelector('.tab[data-view="table"]')?.click();
       });
     });
-  }
-
-  // Ritmo
-  if (ritmo){
-    const ritmoOk = mediaDiaria >= necessarioDia && total.real_mens < total.meta_mens ? "ok" : (mediaDiaria>=necessarioDia ? "ok" : "warn");
-    ritmo.innerHTML = `
-      <div class="ritmo-grid">
-        <div class="ritmo-box">
-          <div class="ritmo-label">Média/dia atual</div>
-          <div class="ritmo-val">${fmtBRL.format(Math.round(mediaDiaria))}</div>
-          <div class="ritmo-bar"><span style="width:100%"></span></div>
-        </div>
-        <div class="ritmo-box">
-          <div class="ritmo-label">Necessário/dia</div>
-          <div class="ritmo-val">${fmtBRL.format(Math.round(necessarioDia))}</div>
-          <div class="ritmo-bar ritmo-need"><span style="width:100%"></span></div>
-        </div>
-        <div class="ritmo-note ${ritmoOk==='ok'?'pos':'neg'}">
-          ${ritmoOk==='ok' ? 'No ritmo para bater a meta.' : 'Abaixo do ritmo — ajuste necessário.'}
-        </div>
-      </div>`;
   }
 
   // Heatmap — (start) × Família
@@ -1917,6 +2769,624 @@ function renderExecutiveView(){
 }
 
 /* ===== Ranking ===== */
+/* ===== Campanhas ===== */
+function currentSprintConfig(){
+  if (!Array.isArray(CAMPAIGN_SPRINTS) || !CAMPAIGN_SPRINTS.length) return null;
+  const id = state.campanhas?.sprintId;
+  return CAMPAIGN_SPRINTS.find(s => s.id === id) || CAMPAIGN_SPRINTS[0];
+}
+
+function ensureCampanhasView(){
+  const host = document.getElementById("view-campanhas");
+  if (!host) return;
+  if (!CAMPAIGN_SPRINTS.length) {
+    host.innerHTML = `<section class="card card--campanhas"><p class="muted">Nenhuma campanha disponível.</p></section>`;
+    return;
+  }
+
+  const select = document.getElementById("campanha-sprint");
+  if (select && !select.dataset.bound) {
+    select.dataset.bound = "1";
+    select.addEventListener("change", (ev) => {
+      state.campanhas.sprintId = ev.target.value;
+      renderCampanhasView();
+    });
+  }
+}
+
+function ensureTeamValuesForSprint(sprint){
+  if (!sprint || !state.campanhas) return {};
+  const store = state.campanhas.teamValues;
+  if (!store[sprint.id]) {
+    const base = {};
+    (sprint.team?.indicators || []).forEach(ind => {
+      base[ind.id] = toNumber(ind.default ?? 100);
+    });
+    store[sprint.id] = base;
+    const defaultPreset = sprint.team?.defaultPreset || (sprint.team?.presets?.[0]?.id || "custom");
+    state.campanhas.teamPreset[sprint.id] = defaultPreset;
+  }
+  return store[sprint.id];
+}
+
+function ensureIndividualValuesForProfile(sprint, profile){
+  if (!sprint || !profile || !state.campanhas) return {};
+  const bySprint = state.campanhas.individualValues[sprint.id] || (state.campanhas.individualValues[sprint.id] = {});
+  if (!bySprint[profile.id]) {
+    const base = {};
+    (profile.indicators || []).forEach(ind => {
+      base[ind.id] = toNumber(ind.default ?? 100);
+    });
+    bySprint[profile.id] = base;
+    const key = `${sprint.id}:${profile.id}`;
+    const defaultPreset = profile.defaultPreset || (profile.presets?.[0]?.id || "custom");
+    state.campanhas.individualPreset[key] = defaultPreset;
+  }
+  return bySprint[profile.id];
+}
+
+function detectPresetMatch(values, presets){
+  if (!values || !Array.isArray(presets)) return null;
+  return presets.find(preset => {
+    const pairs = Object.entries(preset.values || {});
+    return pairs.every(([key, val]) => Math.round(toNumber(val)) === Math.round(toNumber(values[key])));
+  })?.id || null;
+}
+
+function formatCampPoints(value){
+  return `${fmtONE.format(toNumber(value))} pts`;
+}
+
+function formatCampPercent(value){
+  return `${fmtONE.format(toNumber(value))}%`;
+}
+
+function computeCampaignScore(config, values){
+  const indicators = config?.indicators || [];
+  const min = toNumber(config?.minThreshold ?? 90);
+  const stretch = toNumber(config?.superThreshold ?? (min + 20));
+  const cap = toNumber(config?.cap ?? 150);
+  const minTotal = toNumber(config?.eligibilityMinimum ?? 100) || 100;
+
+  const rows = indicators.map(ind => {
+    const raw = Math.max(0, toNumber(values?.[ind.id] ?? ind.default ?? 0));
+    const capped = Math.min(cap, raw);
+    const points = (toNumber(ind.weight) * capped) / 100;
+    let statusText = "Crítico";
+    let statusClass = "status-pill--alert";
+    if (raw >= stretch) {
+      statusText = "Parabéns";
+      statusClass = "status-pill--great";
+    } else if (raw >= min) {
+      statusText = "Elegível";
+      statusClass = "status-pill--ok";
+    } else if (raw >= Math.max(0, min - 10)) {
+      statusText = "Ajustar";
+      statusClass = "status-pill--warn";
+    }
+    return { ...ind, pct: raw, capped, points, statusText, statusClass };
+  });
+
+  const totalPoints = rows.reduce((acc, row) => acc + row.points, 0);
+  const hasAllMin = rows.every(row => row.pct >= min);
+  const hasAllStretch = rows.every(row => row.pct >= stretch);
+  const eligible = hasAllMin && totalPoints >= minTotal;
+
+  let finalStatus = "Não elegível";
+  let finalClass = "status-tag--alert";
+  if (hasAllStretch && totalPoints >= minTotal) {
+    finalStatus = "Parabéns";
+    finalClass = "status-tag--great";
+  } else if (eligible) {
+    finalStatus = "Elegível";
+    finalClass = "status-tag--ok";
+  } else if (hasAllMin) {
+    finalStatus = "Ajustar foco";
+    finalClass = "status-tag--warn";
+  }
+
+  const shortfall = Math.max(0, minTotal - totalPoints);
+  const progressPct = minTotal ? Math.max(0, Math.min(1, totalPoints / minTotal)) : 0;
+  const progressLabel = shortfall > 0
+    ? `${fmtONE.format(shortfall)} pts para elegibilidade`
+    : (hasAllStretch ? "Acima do stretch" : "Meta mínima atingida");
+
+  return { rows, totalPoints, finalStatus, finalClass, progressPct, progressLabel, shortfall, hasAllMin, hasAllStretch, minThreshold: min, superThreshold: stretch, cap, eligibilityMinimum: minTotal };
+}
+
+function teamPresetForSprint(sprint){
+  return state.campanhas.teamPreset[sprint.id] || "custom";
+}
+
+function setTeamPresetForSprint(sprint, presetId){
+  state.campanhas.teamPreset[sprint.id] = presetId || "custom";
+}
+
+function individualPresetKey(sprint, profile){
+  return `${sprint.id}:${profile.id}`;
+}
+
+function individualPresetForProfile(sprint, profile){
+  return state.campanhas.individualPreset[individualPresetKey(sprint, profile)] || "custom";
+}
+
+function setIndividualPresetForProfile(sprint, profile, presetId){
+  state.campanhas.individualPreset[individualPresetKey(sprint, profile)] = presetId || "custom";
+}
+
+function buildTeamSimulator(container, sprint){
+  if (!container || !sprint?.team) return;
+  if (container.dataset.sprintId === sprint.id) return;
+  container.dataset.sprintId = sprint.id;
+
+  const indicators = sprint.team.indicators || [];
+  const presets = sprint.team.presets || [];
+
+  container.innerHTML = `
+    <div class="sim-card__head">
+      <h5>Simulador de equipe</h5>
+      <p>Defina o atingimento de cada indicador para estimar a pontuação e a elegibilidade da equipe.</p>
+    </div>
+    <div class="sim-presets" id="team-presets">
+      ${presets.map(p => `<button type="button" class="sim-chip" data-team-preset="${p.id}">${p.label}</button>`).join("")}
+    </div>
+    <table class="sim-table">
+      <thead>
+        <tr>
+          <th>Indicador</th>
+          <th>Peso</th>
+          <th>Atingimento</th>
+          <th>Pontos</th>
+          <th>Resultado</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${indicators.map(ind => `
+          <tr data-row="${ind.id}">
+            <td>
+              <strong>${ind.label}</strong>
+              ${ind.hint ? `<div class="muted" style="font-size:12px;">${ind.hint}</div>` : ""}
+            </td>
+            <td class="sim-weight">${fmtONE.format(toNumber(ind.weight))}%</td>
+            <td>
+              <div class="sim-slider">
+                <input type="range" min="0" max="160" step="1" data-indicator="${ind.id}" aria-label="${ind.label}" />
+                <span class="sim-slider-value" data-output="${ind.id}"></span>
+              </div>
+            </td>
+            <td class="sim-points" data-points="${ind.id}"></td>
+            <td><span class="status-pill" data-status="${ind.id}"></span></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <div class="sim-summary">
+      <div class="sim-total">
+        <span>Pontuação total</span>
+        <strong id="team-total-points"></strong>
+      </div>
+      <div class="sim-progress">
+        <div class="sim-progress__track"><span id="team-progress-bar"></span></div>
+        <small id="team-progress-label"></small>
+      </div>
+      <div class="sim-outcome">
+        <span id="team-status" class="status-tag"></span>
+      </div>
+    </div>
+  `;
+
+  container.querySelectorAll("input[type=range]").forEach(input => {
+    input.addEventListener("input", (ev) => {
+      const id = ev.currentTarget.dataset.indicator;
+      const values = ensureTeamValuesForSprint(sprint);
+      values[id] = toNumber(ev.currentTarget.value);
+      updateTeamSimulator(container, sprint);
+    });
+  });
+
+  container.querySelectorAll("[data-team-preset]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const presetId = btn.dataset.teamPreset;
+      const preset = presets.find(p => p.id === presetId);
+      if (!preset) return;
+      const values = ensureTeamValuesForSprint(sprint);
+      Object.entries(preset.values || {}).forEach(([key, val]) => {
+        values[key] = toNumber(val);
+      });
+      setTeamPresetForSprint(sprint, presetId);
+      updateTeamSimulator(container, sprint);
+    });
+  });
+}
+
+function updateTeamSimulator(container, sprint){
+  if (!container || !sprint?.team) return;
+  const values = ensureTeamValuesForSprint(sprint);
+  const result = computeCampaignScore(sprint.team, values);
+
+  (sprint.team.indicators || []).forEach(ind => {
+    const row = container.querySelector(`tr[data-row="${ind.id}"]`);
+    if (!row) return;
+    const slider = row.querySelector("input[type=range]");
+    if (slider && slider.value !== String(values[ind.id])) slider.value = String(values[ind.id]);
+    const output = row.querySelector(`[data-output="${ind.id}"]`);
+    if (output) output.textContent = formatCampPercent(values[ind.id] ?? 0);
+    const pointsCell = row.querySelector(`[data-points="${ind.id}"]`);
+    const rowData = result.rows.find(r => r.id === ind.id);
+    if (pointsCell && rowData) pointsCell.textContent = formatCampPoints(rowData.points);
+    const statusEl = row.querySelector(`[data-status="${ind.id}"]`);
+    if (statusEl && rowData) {
+      statusEl.textContent = rowData.statusText;
+      statusEl.className = `status-pill ${rowData.statusClass}`;
+    }
+  });
+
+  const presetMatch = detectPresetMatch(values, sprint.team.presets);
+  setTeamPresetForSprint(sprint, presetMatch || "custom");
+  const activePreset = teamPresetForSprint(sprint);
+  container.querySelectorAll("[data-team-preset]").forEach(btn => {
+    btn.classList.toggle("is-active", btn.dataset.teamPreset === activePreset);
+  });
+
+  const totalEl = container.querySelector("#team-total-points");
+  if (totalEl) totalEl.textContent = formatCampPoints(result.totalPoints);
+  const statusEl = container.querySelector("#team-status");
+  if (statusEl) {
+    statusEl.textContent = result.finalStatus;
+    statusEl.className = `status-tag ${result.finalClass}`;
+  }
+  const progressBar = container.querySelector("#team-progress-bar");
+  if (progressBar) progressBar.style.width = `${Math.round(result.progressPct * 100)}%`;
+  const progressLabel = container.querySelector("#team-progress-label");
+  if (progressLabel) progressLabel.textContent = result.progressLabel;
+}
+
+function buildIndividualSimulator(container, sprint, profile){
+  if (!container || !sprint || !profile) return;
+  const key = `${sprint.id}:${profile.id}`;
+  if (container.dataset.profileKey === key) return;
+  container.dataset.profileKey = key;
+
+  const profiles = sprint.individual?.profiles || [];
+  const presets = profile.presets || [];
+  const scenarios = profile.scenarios || [];
+
+  container.innerHTML = `
+    <div class="sim-card__head">
+      <h5>Simulador individual</h5>
+      <p>Simule o desempenho de um gerente considerando os mesmos pesos da campanha.</p>
+    </div>
+    <div class="segmented seg-mini" role="tablist" id="individual-profiles">
+      ${profiles.map(p => `<button type="button" class="seg-btn" data-profile="${p.id}">${p.label}</button>`).join("")}
+    </div>
+    <p class="muted" id="individual-description" style="margin:0;"></p>
+    <div class="sim-presets" id="individual-presets">
+      ${presets.map(p => `<button type="button" class="sim-chip" data-individual-preset="${p.id}">${p.label}</button>`).join("")}
+    </div>
+    <table class="sim-table">
+      <thead>
+        <tr>
+          <th>Indicador</th>
+          <th>Peso</th>
+          <th>Atingimento</th>
+          <th>Pontos</th>
+          <th>Resultado</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${(profile.indicators || []).map(ind => `
+          <tr data-row="${ind.id}">
+            <td>
+              <strong>${ind.label}</strong>
+            </td>
+            <td class="sim-weight">${fmtONE.format(toNumber(ind.weight))}%</td>
+            <td>
+              <div class="sim-slider">
+                <input type="range" min="0" max="160" step="1" data-indicator="${ind.id}" aria-label="${ind.label}" />
+                <span class="sim-slider-value" data-output="${ind.id}"></span>
+              </div>
+            </td>
+            <td class="sim-points" data-points="${ind.id}"></td>
+            <td><span class="status-pill" data-status="${ind.id}"></span></td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+    <div class="sim-summary">
+      <div class="sim-total">
+        <span>Pontuação total</span>
+        <strong id="individual-total-points"></strong>
+      </div>
+      <div class="sim-progress">
+        <div class="sim-progress__track"><span id="individual-progress-bar"></span></div>
+        <small id="individual-progress-label"></small>
+      </div>
+      <div class="sim-outcome">
+        <span id="individual-status" class="status-tag"></span>
+      </div>
+    </div>
+    <div class="sim-scenarios">
+      <h6 style="margin:0 0 6px; font-size:13px; color:#0f172a;">Combinações sugeridas</h6>
+      <table class="scenario-table">
+        <thead>
+          <tr>
+            <th>Configuração</th>
+            <th>Linhas</th>
+            <th>Cash</th>
+            <th>Conquista</th>
+            <th>Pontos</th>
+            <th>Elegibilidade</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${scenarios.map(sc => {
+            const res = computeCampaignScore(profile, sc.values);
+            return `
+              <tr data-scenario="${sc.id}">
+                <td>${sc.label}</td>
+                <td>${formatCampPercent(sc.values?.linhas ?? 0)}</td>
+                <td>${formatCampPercent(sc.values?.cash ?? 0)}</td>
+                <td>${formatCampPercent(sc.values?.conquista ?? 0)}</td>
+                <td>${formatCampPoints(res.totalPoints)}</td>
+                <td><span class="status-pill ${res.finalClass.replace('status-tag', 'status-pill').replace('--great','--great').replace('--ok','--ok').replace('--warn','--warn').replace('--alert','--alert')}" data-scenario-status="${sc.id}">${sc.note || res.finalStatus}</span></td>
+                <td class="scenario-actions"><button type="button" data-apply-scenario="${sc.id}">Aplicar</button></td>
+              </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  container.querySelectorAll("#individual-profiles .seg-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const profileId = btn.dataset.profile;
+      if (!profileId) return;
+      state.campanhas.individualProfile = profileId;
+      renderCampanhasView();
+    });
+  });
+
+  container.querySelectorAll("input[type=range]").forEach(input => {
+    input.addEventListener("input", (ev) => {
+      const id = ev.currentTarget.dataset.indicator;
+      const values = ensureIndividualValuesForProfile(sprint, profile);
+      values[id] = toNumber(ev.currentTarget.value);
+      updateIndividualSimulator(container, sprint, profile);
+    });
+  });
+
+  container.querySelectorAll("[data-individual-preset]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const presetId = btn.dataset.individualPreset;
+      const preset = presets.find(p => p.id === presetId);
+      if (!preset) return;
+      const values = ensureIndividualValuesForProfile(sprint, profile);
+      Object.entries(preset.values || {}).forEach(([key, val]) => {
+        values[key] = toNumber(val);
+      });
+      setIndividualPresetForProfile(sprint, profile, presetId);
+      updateIndividualSimulator(container, sprint, profile);
+    });
+  });
+
+  container.querySelectorAll("[data-apply-scenario]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const scId = btn.dataset.applyScenario;
+      const scenario = (profile.scenarios || []).find(sc => sc.id === scId);
+      if (!scenario) return;
+      const values = ensureIndividualValuesForProfile(sprint, profile);
+      Object.entries(scenario.values || {}).forEach(([key, val]) => {
+        values[key] = toNumber(val);
+      });
+      setIndividualPresetForProfile(sprint, profile, detectPresetMatch(values, presets) || "custom");
+      updateIndividualSimulator(container, sprint, profile);
+    });
+  });
+}
+
+function updateIndividualSimulator(container, sprint, profile){
+  if (!container || !sprint || !profile) return;
+  const values = ensureIndividualValuesForProfile(sprint, profile);
+  const result = computeCampaignScore(profile, values);
+
+  container.querySelectorAll("#individual-profiles .seg-btn").forEach(btn => {
+    btn.classList.toggle("is-active", btn.dataset.profile === profile.id);
+  });
+
+  const desc = container.querySelector("#individual-description");
+  if (desc) desc.textContent = profile.description || "";
+
+  (profile.indicators || []).forEach(ind => {
+    const row = container.querySelector(`tr[data-row="${ind.id}"]`);
+    if (!row) return;
+    const slider = row.querySelector("input[type=range]");
+    if (slider && slider.value !== String(values[ind.id])) slider.value = String(values[ind.id]);
+    const output = row.querySelector(`[data-output="${ind.id}"]`);
+    if (output) output.textContent = formatCampPercent(values[ind.id] ?? 0);
+    const rowData = result.rows.find(r => r.id === ind.id);
+    const pointsCell = row.querySelector(`[data-points="${ind.id}"]`);
+    if (pointsCell && rowData) pointsCell.textContent = formatCampPoints(rowData.points);
+    const statusEl = row.querySelector(`[data-status="${ind.id}"]`);
+    if (statusEl && rowData) {
+      statusEl.textContent = rowData.statusText;
+      statusEl.className = `status-pill ${rowData.statusClass}`;
+    }
+  });
+
+  const presetMatch = detectPresetMatch(values, profile.presets);
+  setIndividualPresetForProfile(sprint, profile, presetMatch || "custom");
+  const activePreset = individualPresetForProfile(sprint, profile);
+  container.querySelectorAll("[data-individual-preset]").forEach(btn => {
+    btn.classList.toggle("is-active", btn.dataset.individualPreset === activePreset);
+  });
+
+  const totalEl = container.querySelector("#individual-total-points");
+  if (totalEl) totalEl.textContent = formatCampPoints(result.totalPoints);
+  const statusEl = container.querySelector("#individual-status");
+  if (statusEl) {
+    statusEl.textContent = result.finalStatus;
+    statusEl.className = `status-tag ${result.finalClass}`;
+  }
+  const progressBar = container.querySelector("#individual-progress-bar");
+  if (progressBar) progressBar.style.width = `${Math.round(result.progressPct * 100)}%`;
+  const progressLabel = container.querySelector("#individual-progress-label");
+  if (progressLabel) progressLabel.textContent = result.progressLabel;
+
+  const currentScenario = (profile.scenarios || []).find(sc => {
+    const entries = Object.entries(sc.values || {});
+    return entries.every(([key, val]) => Math.round(toNumber(val)) === Math.round(toNumber(values[key])));
+  });
+  container.querySelectorAll(".scenario-table tr").forEach(tr => {
+    tr.classList.toggle("is-active", currentScenario && tr.dataset.scenario === currentScenario.id);
+  });
+}
+
+function badgeClassFromStatus(status){
+  const norm = (status || "").toLowerCase();
+  if (norm.includes("parab")) return "elegibility-badge elegibility-badge--great";
+  if (norm.includes("não") || norm.includes("nao")) return "elegibility-badge elegibility-badge--warn";
+  if (norm.includes("ajust")) return "elegibility-badge elegibility-badge--warn";
+  return "elegibility-badge elegibility-badge--ok";
+}
+
+function renderCampaignRanking(container, sprint){
+  if (!container) return;
+  const rows = sprint?.ranking || [];
+  if (!rows.length) {
+    container.innerHTML = `<p class="muted">Nenhum resultado disponível.</p>`;
+    return;
+  }
+
+  const config = sprint.team;
+  const body = rows.map(row => {
+    const values = { linhas: row.linhas, cash: row.cash, conquista: row.conquista };
+    const result = computeCampaignScore(config, values);
+    const linhas = result.rows.find(r => r.id === "linhas");
+    const cash = result.rows.find(r => r.id === "cash");
+    const conquista = result.rows.find(r => r.id === "conquista");
+    const badgeClass = badgeClassFromStatus(row.status || result.finalStatus);
+    return `
+      <tr>
+        <td class="pos-col">${row.rank}</td>
+        <td class="regional-col">${row.regional}</td>
+        <td>
+          <div class="indicator-bar">
+            <div class="indicator-bar__track"><span style="width:${Math.min(100, (linhas?.capped || 0) / (config?.cap || 150) * 100)}%"></span></div>
+            <div class="indicator-bar__value">${formatCampPercent(row.linhas)}</div>
+          </div>
+          <div class="indicator-bar__points">${formatCampPoints(linhas?.points || 0)}</div>
+        </td>
+        <td>
+          <div class="indicator-bar">
+            <div class="indicator-bar__track"><span style="width:${Math.min(100, (cash?.capped || 0) / (config?.cap || 150) * 100)}%"></span></div>
+            <div class="indicator-bar__value">${formatCampPercent(row.cash)}</div>
+          </div>
+          <div class="indicator-bar__points">${formatCampPoints(cash?.points || 0)}</div>
+        </td>
+        <td>
+          <div class="indicator-bar">
+            <div class="indicator-bar__track"><span style="width:${Math.min(100, (conquista?.capped || 0) / (config?.cap || 150) * 100)}%"></span></div>
+            <div class="indicator-bar__value">${formatCampPercent(row.conquista)}</div>
+          </div>
+          <div class="indicator-bar__points">${formatCampPoints(conquista?.points || 0)}</div>
+        </td>
+        <td>${formatCampPoints(result.totalPoints)}</td>
+        <td>${row.atividade ? "Sim" : "Não"}</td>
+        <td><span class="${badgeClass}">${row.status || result.finalStatus}</span></td>
+      </tr>`;
+  }).join("");
+
+  container.innerHTML = `
+    <table class="camp-ranking-table">
+      <thead>
+        <tr>
+          <th class="pos-col">#</th>
+          <th class="regional-col">Regional</th>
+          <th>Linhas governamentais</th>
+          <th>Cash (TPV)</th>
+          <th>Abertura de contas</th>
+          <th>Pontuação final</th>
+          <th>Atividade comercial</th>
+          <th>Elegibilidade</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>`;
+}
+
+function renderCampanhasView(){
+  const host = document.getElementById("view-campanhas");
+  if (!host) return;
+  if (!Array.isArray(CAMPAIGN_SPRINTS) || !CAMPAIGN_SPRINTS.length) return;
+
+  const sprint = currentSprintConfig();
+  if (!sprint) return;
+
+  const select = document.getElementById("campanha-sprint");
+  if (select) {
+    select.innerHTML = CAMPAIGN_SPRINTS.map(sp => `<option value="${sp.id}">${sp.label}</option>`).join("");
+    select.value = sprint.id;
+  }
+
+  const cycleEl = document.getElementById("camp-cycle");
+  if (cycleEl) cycleEl.textContent = sprint.cycle || "";
+
+  const noteEl = document.getElementById("camp-note");
+  if (noteEl) noteEl.textContent = sprint.note || "";
+
+  const periodEl = document.getElementById("camp-period");
+  if (periodEl) {
+    const start = sprint.period?.start ? formatBRDate(sprint.period.start) : "";
+    const end = sprint.period?.end ? formatBRDate(sprint.period.end) : "";
+    periodEl.textContent = start && end ? `De ${start} até ${end}` : "Período não informado";
+  }
+
+  const headline = document.getElementById("camp-headline");
+  if (headline) {
+    headline.innerHTML = (sprint.headStats || []).map(stat => `
+      <div class="camp-hero__stat">
+        <span>${stat.label}</span>
+        <strong>${stat.value}</strong>
+        ${stat.sub ? `<small>${stat.sub}</small>` : ""}
+      </div>`).join("");
+  }
+
+  const kpiGrid = document.getElementById("camp-kpis");
+  if (kpiGrid) {
+    kpiGrid.innerHTML = (sprint.summary || []).map(item => {
+      if (item.total != null) {
+        return `<div class="camp-kpi"><span>${item.label}</span><strong>${fmtINT.format(item.value)} / ${fmtINT.format(item.total)}</strong><small>de ${fmtINT.format(item.total)} monitoradas</small></div>`;
+      }
+      if (item.unit === "pts") {
+        return `<div class="camp-kpi"><span>${item.label}</span><strong>${formatCampPoints(item.value)}</strong>${item.complement ? `<small>${item.complement}</small>` : ""}</div>`;
+      }
+      if (item.text) {
+        return `<div class="camp-kpi"><span>${item.label}</span><strong>${item.text}</strong></div>`;
+      }
+      return `<div class="camp-kpi"><span>${item.label}</span><strong>${fmtONE.format(item.value)}</strong>${item.complement ? `<small>${item.complement}</small>` : ""}</div>`;
+    }).join("");
+  }
+
+  const teamContainer = document.getElementById("sim-equipe");
+  buildTeamSimulator(teamContainer, sprint);
+  updateTeamSimulator(teamContainer, sprint);
+
+  const profiles = sprint.individual?.profiles || [];
+  if (!profiles.length) state.campanhas.individualProfile = null;
+  if (profiles.length && !profiles.find(p => p.id === state.campanhas.individualProfile)) {
+    state.campanhas.individualProfile = profiles[0].id;
+  }
+  const profile = profiles.find(p => p.id === state.campanhas.individualProfile) || profiles[0] || null;
+  const individualContainer = document.getElementById("sim-individual");
+  buildIndividualSimulator(individualContainer, sprint, profile);
+  updateIndividualSimulator(individualContainer, sprint, profile);
+
+  const rankingContainer = document.getElementById("camp-ranking");
+  renderCampaignRanking(rankingContainer, sprint);
+}
+
+
 function createRankingView(){
   const main = document.querySelector(".container"); 
   if(!main) return;
@@ -2036,8 +3506,6 @@ function renderRanking(){
         <th>Pontos (mensal)</th>
         <th>Pontos (acumulado)</th>
         <th>Atingimento</th>
-        <th>Realizado (R$)</th>
-        <th>Meta (R$)</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -2048,8 +3516,6 @@ function renderRanking(){
     const isMine = (myUnit && r.unidade === myUnit);
     const nome = isMine ? r.unidade : "••••••••••";
     const ating = state.rk.mode === "acumulado" ? r.ating_acum : r.ating_mens;
-    const real  = state.rk.mode === "acumulado" ? r.real_acum : r.real_mens;
-    const meta  = state.rk.mode === "acumulado" ? r.meta_acum : r.meta_mens;
 
     const tr = document.createElement("tr");
     tr.className = `rk-row ${isMine? "rk-row--mine":""}`;
@@ -2059,8 +3525,6 @@ function renderRanking(){
       <td>${r.p_mens.toFixed(1)}</td>
       <td>${r.p_acum.toFixed(1)}</td>
       <td><span class="att-badge ${ating*100<50?"att-low":(ating*100<100?"att-warn":"att-ok")}">${(ating*100).toFixed(1)}%</span></td>
-      <td>${fmtBRL.format(real)}</td>
-      <td>${fmtBRL.format(meta)}</td>
     `;
     tb.appendChild(tr);
   });
@@ -2105,7 +3569,39 @@ function renderTreeTable() {
 
   let seq=0; const mkId=()=>`n${++seq}`;
   const att = (p)=>{ const pct=(p*100); const cls=pct<50?"att-low":(pct<100?"att-warn":"att-ok"); return `<span class="att-badge ${cls}">${pct.toFixed(1)}%</span>`; }
-  const defas = (real,meta)=>{ const d=(real||0)-(meta||0); const cls=d>=0?"def-pos":"def-neg"; return `<span class="def-badge ${cls}">${fmtBRL.format(d)}</span>`; }
+  const defas = (real,meta)=>{ const d=(real||0)-(meta||0); const cls=d>=0?"def-pos":"def-neg"; const full=fmtBRL.format(Math.round(d)); const display=formatBRLReadable(d); return `<span class="def-badge ${cls}" title="${full}">${display}</span>`; }
+
+  const buildDetailTableHTML = (groups=[]) => {
+    if (!groups || !groups.length) return "";
+    const fmtDate = iso => (iso ? formatBRDate(iso) : "—");
+    const rows = groups.map(g => `
+      <tr>
+        <td>${g.canal || "—"}</td>
+        <td>${g.tipo || "—"}</td>
+        <td>${g.gerente || "—"}</td>
+        <td>${g.modalidade || "—"}</td>
+        <td>${fmtDate(g.dataVencimento)}</td>
+        <td>${fmtDate(g.dataCancelamento)}</td>
+        <td>${g.motivoCancelamento || "—"}</td>
+      </tr>`).join("");
+    return `
+      <div class="tree-detail-wrapper">
+        <table class="detail-table">
+          <thead>
+            <tr>
+              <th>Canal da venda</th>
+              <th>Tipo da venda</th>
+              <th>Gerente</th>
+              <th>Condição de pagamento</th>
+              <th>Data de vencimento</th>
+              <th>Data de cancelamento</th>
+              <th>Motivo do cancelamento</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  };
 
   function renderNode(node, parentId=null, parentTrail=[]){
     const id=mkId(), has=!!(node.children&&node.children.length);
@@ -2113,14 +3609,32 @@ function renderTreeTable() {
     tr.className=`tree-row ${node.type==="contrato"?"type-contrato":""} lvl-${node.level}`;
     tr.dataset.id=id; if(parentId) tr.dataset.parent=parentId;
     const trail=[...parentTrail, node.label];
+    const hasDetails = node.type === "contrato" && Array.isArray(node.detailGroups) && node.detailGroups.length > 0;
+    let detailTr=null;
+
+    if (hasDetails) tr.classList.add("has-detail");
+
+    const labelBase = (node.type === "contrato" || !node.detail?.gerente)
+      ? node.label
+      : `Gerente: ${node.detail.gerente}`;
+    const labelHtml = node.detail
+      ? `<div class="tree-label"><span class="label-strong">${labelBase}</span></div>`
+      : `<span class="label-strong">${node.label}</span>`;
+
+    const qtyFull = fmtINT.format(Math.round(node.qtd || 0));
+    const qtyDisplay = formatIntReadable(node.qtd || 0);
+    const realizadoFull = fmtBRL.format(Math.round(node.realizado || 0));
+    const realizadoDisplay = formatBRLReadable(node.realizado || 0);
+    const metaFull = fmtBRL.format(Math.round(node.meta || 0));
+    const metaDisplay = formatBRLReadable(node.meta || 0);
 
     tr.innerHTML=`
       <td><div class="tree-cell">
         <button class="toggle" type="button" ${has?"":"disabled"} aria-label="${has?"Expandir/colapsar":""}"><i class="ti ${has?"ti-chevron-right":"ti-dot"}"></i></button>
-        <span class="label-strong">${node.label}</span></div></td>
-      <td>${fmtINT.format(node.qtd||0)}</td>
-      <td>${fmtBRL.format(node.realizado||0)}</td>
-      <td>${fmtBRL.format(node.meta||0)}</td>
+        ${labelHtml}</div></td>
+      <td><span title="${qtyFull}">${qtyDisplay}</span></td>
+      <td><span title="${realizadoFull}">${realizadoDisplay}</span></td>
+      <td><span title="${metaFull}">${metaDisplay}</span></td>
       <td>${defas(node.realizado,node.meta)}</td>
       <td>${att(node.ating||0)}</td>
       <td>${formatBRDate(node.data||"")}</td>
@@ -2151,6 +3665,28 @@ function renderTreeTable() {
     }
 
     tbody.appendChild(tr);
+
+    if (hasDetails){
+      detailTr=document.createElement("tr");
+      detailTr.className="tree-row tree-detail-row";
+      detailTr.dataset.detailParent=id;
+      detailTr.style.display="none";
+      detailTr.innerHTML=`<td colspan="8">${buildDetailTableHTML(node.detailGroups)}</td>`;
+      tbody.appendChild(detailTr);
+
+      tr.addEventListener("click", (ev)=>{
+        if (ev.target.closest('.toggle') || ev.target.closest('.icon-btn')) return;
+        const open = detailTr.style.display === "table-row";
+        if (open){
+          detailTr.style.display="none";
+          tr.classList.remove("is-detail-open");
+        } else {
+          detailTr.style.display="table-row";
+          tr.classList.add("is-detail-open");
+        }
+      });
+    }
+
     if(has){
       node.children.forEach(ch=>renderNode(ch, id, trail));
       toggleChildren(id, false);
@@ -2167,6 +3703,14 @@ function renderTreeTable() {
         toggleChildren(ch.dataset.id,false);
       }
     });
+    if(!show){
+      const detail=tbody.querySelector(`tr.tree-detail-row[data-detail-parent="${parentId}"]`);
+      if(detail){
+        detail.style.display="none";
+        const parentRow=tbody.querySelector(`tr[data-id="${parentId}"]`);
+        parentRow?.classList.remove("is-detail-open");
+      }
+    }
   }
 
   nodes.forEach(n=>renderNode(n,null,[]));
@@ -2267,13 +3811,14 @@ async function refresh(){
     const dataset = await getData();
     state._dataset = dataset;
     state._rankingRaw = dataset.ranking;
+    updateContractAutocomplete();
 
     const right = document.getElementById("lbl-atualizacao");
     if(right){
       right.innerHTML = `
         <div class="period-inline">
           <span class="txt">
-            Valores acumulados desde
+            De
             <strong><span id="lbl-periodo-inicio">${formatBRDate(state.period.start)}</span></strong>
             até
             <strong><span id="lbl-periodo-fim">${formatBRDate(state.period.end)}</span></strong>
@@ -2292,6 +3837,7 @@ async function refresh(){
 
     if (state.activeView==="ranking") renderRanking();
     if (state.activeView==="exec")    renderExecutiveView();
+    if (state.activeView==="campanhas") renderCampanhasView();
 
   }catch(e){
     console.error(e);
