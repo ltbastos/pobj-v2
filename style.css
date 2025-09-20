@@ -283,14 +283,22 @@ select.input{
 .fam-section{ margin:22px 0 6px; }
 .fam-section__header{ display:flex; align-items:center; gap:12px; margin:0 2px 12px; }
 .fam-section__title{ font-weight:800; color:#1f2937; font-size:18px; display:flex; align-items:center; gap:10px; }
-.fam-section__meta{ color:#6b7280; font-weight:700; font-size:12.5px; white-space:nowrap; }
+.fam-section__meta{
+  color:#6b7280;
+  font-weight:700;
+  font-size:12.5px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:12px;
+}
+.fam-section__meta-item{ white-space:nowrap; }
 .fam-section__grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,1fr)); gap:16px; }
 
 /* Card de produto */
 .prod-card{
   position:relative; overflow:visible;
   background:#fff; border:1px solid var(--stroke); border-radius:18px;
-  padding:16px 16px 26px; box-shadow:var(--shadow);
+  padding:16px 16px 20px; box-shadow:var(--shadow);
   display:flex; flex-direction:column; gap:12px;
   transition:.18s ease transform,.18s ease box-shadow,.18s ease border-color;
   cursor:pointer;
@@ -328,8 +336,32 @@ select.input{
 .kv small{ display:block; color:#6b7280; font-size:12px; margin-bottom:4px; }
 .kv strong{ display:block; font-size:16px; line-height:1.15; white-space:nowrap; }
 
+/* Barra de variÃ¡vel */
+.prod-card__var{ display:flex; flex-direction:column; gap:6px; }
+.prod-card__var-head{ display:flex; align-items:center; justify-content:space-between; font-size:12px; color:#4b5563; }
+.prod-card__var-head strong{ font-size:13px; color:#111827; font-weight:800; }
+.prod-card__var-track{
+  position:relative;
+  height:10px;
+  border-radius:999px;
+  border:1px solid #e5e7eb;
+  background:#f3f4f6;
+  overflow:hidden;
+}
+.prod-card__var-track span{ display:block; height:100%; border-radius:inherit; transition:width .28s ease; }
+.prod-card__var-track.var--low span{ background:#fecaca; }
+.prod-card__var-track.var--warn span{ background:#fed7aa; }
+.prod-card__var-track.var--ok span{ background:#bbf7d0; }
+
 /* RodapÃ© do card */
-.prod-card__foot{ position:absolute; right:12px; bottom:8px; font-size:11px; color:var(--muted); }
+.prod-card__foot{
+  margin-top:auto;
+  padding-top:6px;
+  font-size:11px;
+  color:var(--muted);
+  text-align:right;
+  align-self:flex-end;
+}
 
 /* Tooltip dos cards */
 .kpi-tip{
@@ -469,9 +501,14 @@ select.input{
 .rk-row--mine:hover{ background:#e8f4ff; }
 
 /* =========================================================
-   VISÃƒO EXECUTIVA (grÃ¡ficos + mini-ranks + ritmo)
+   VISÃO EXECUTIVA (gráficos + mini-ranks)
    ========================================================= */
-.card--exec{ padding-top:12px; }
+.card--exec{
+  padding-top:12px;
+  display:flex;
+  flex-direction:column;
+  gap:20px;
+}
 .exec-actions{ display:flex; gap:8px; flex-wrap:wrap; }
 
 .exec-kpis{
@@ -499,6 +536,21 @@ select.input{
   background:#fff; border:1px solid var(--stroke); border-radius:14px;
   padding:12px; box-shadow:var(--shadow);
 }
+.exec-head{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+.seg-mini.segmented{ padding:2px; border-radius:8px; }
+.seg-mini .seg-btn{ padding:6px 8px; font-size:12px; }
+.exec-chart{
+  padding:20px;
+  box-sizing:border-box;
+  margin-bottom:12px;
+}
+.exec-chart .chart{
+  width:100%;
+  padding:20px;
+  border-radius:12px;
+  background:#fff;
+  box-sizing:border-box;
+}
 .exec-span-2{ grid-column: 1 / -1; }
 .exec-h{ margin:0 0 10px; font-size:14px; color:#374151; }
 
@@ -515,17 +567,7 @@ select.input{
 .rank-mini__pct{ text-align:right; }
 .rank-mini__vals{ text-align:right; color:#6b7280; font-weight:700; }
 
-/* ritmo */
-.ritmo-grid{ display:grid; grid-template-columns:repeat(2, minmax(200px,1fr)); gap:12px; align-items:end; }
-.ritmo-box{ background:#f8fafc; border:1px dashed #dde5ff; border-radius:12px; padding:10px 12px; }
-.ritmo-label{ color:#64748b; font-weight:700; font-size:12px; }
-.ritmo-val{ font-weight:800; font-size:18px; color:#111827; margin:4px 0; }
-.ritmo-bar{ height:10px; border-radius:999px; background:#dcfce7; border:1px solid #bbf7d0; overflow:hidden; }
-.ritmo-bar.ritmo-need{ background:#fee2e2; border-color:#fecaca; }
-.ritmo-bar span{ display:block; height:100%; width:100%; opacity:.7; }
-.ritmo-note{ grid-column:1 / -1; margin-top:2px; font-weight:800; }
-.ritmo-note.pos{ color:#166534; }
-.ritmo-note.neg{ color:#991b1b; }
+/* ritmo removido */
 
 /* heatmap */
 .hm{ display:flex; flex-direction:column; gap:4px; overflow:auto; }
@@ -564,7 +606,12 @@ select.input{
    ========================================================= */
 /* Use .chart-card no painel com grÃ¡fico para espaÃ§ar menos */
 .chart-card{ padding:10px; }
-.chart-legend{ display:flex; align-items:center; gap:8px; margin-top:6px; font-size:11.5px; color:#6b7280; }
+.chart-legend{ display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:6px; font-size:11.5px; color:#6b7280; }
+.legend-item{ display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#475569; }
+.legend-swatch{ width:14px; height:6px; border-radius:999px; background:#cbd5e1; border:1px solid #94a3b8; display:inline-block; }
+.legend-swatch--meta{ background:#93c5fd; border-color:#60a5fa; }
+.legend-swatch--real{ background:#86efac; border-color:#4ade80; }
+.legend-swatch--bars{ background:#e5e7eb; border-color:#cbd5e1; height:10px; }
 /* Ajuste de altura padrÃ£o; seu JS/Chart.js vai herdar do container */
 .chart-wrap{ height:260px; }
 
@@ -729,7 +776,7 @@ select.input{
   .container{ padding:0 12px; }
   .filters{ grid-template-columns:1fr; }
   .adv__grid{ grid-template-columns:1fr; }
-  .prod-card{ padding:14px 14px 24px; }
+  .prod-card{ padding:14px 14px 18px; }
   .kv strong{ font-size:15px; }
   .kpi-tip{ width: calc(100vw - 24px); right: auto; left: 12px; }
 }
