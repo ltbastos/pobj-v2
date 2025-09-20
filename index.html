@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>POBJ Produções</title>
+  <link rel="icon" type="image/png" href="img/pobj.png" sizes="32x32">
+  <link rel="icon" type="image/png" href="img/pobj.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="img/pobj.png" sizes="180x180">
+  <link rel="shortcut icon" href="img/pobj.png">
+
+
+
+  <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet"/>
+  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.V2.css"/>
+</head>
+<body>
+  <!-- TOPBAR -->
+  <header class="topbar">
+  <div class="topbar__left">
+    <button class="topbar-hamburger" id="btn-open-drawer" aria-label="Abrir menu">
+      <i class="ti ti-menu-2"></i>
+    </button>
+
+    <div class="logo">
+      <span class="logo__mark" aria-hidden="true"></span>
+      <span class="logo__text">Bradesco</span>
+    </div>
+  </div>
+
+  <div class="topbar__right">
+    <div class="userbox">
+      <img class="userbox__avatar" src="https://i.pravatar.cc/80?img=12" alt="Foto do usuário"/>
+      <div class="userbox__name">X Burguer</div>
+      <button class="btn btn--ghost btn--logout" type="button">
+        <i class="ti ti-logout-2"></i> <span class="btn-label">Sair</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+
+  <main class="container">
+    <!-- CARD DE FILTROS -->
+    <section class="card card--filters">
+      <header class="card__header">
+        <div class="title-subtitle">
+          <h2>POBJ Produções</h2>
+          <p class="muted">
+            Acompanhe dados atualizados de performance.
+            <span class="tooltip">
+              <span class="chip-info">?</span>
+            </span>
+          </p>
+        </div>
+      </header>
+
+      <div class="filters">
+        <div class="filters__group">
+          <label>Diretoria regional</label>
+          <select id="f-diretoria" class="input"></select>
+        </div>
+        <div class="filters__group">
+          <label>Gerência regional</label>
+          <select id="f-gerencia" class="input"></select>
+        </div>
+        <div class="filters__group">
+          <label>Gerente</label>
+          <select id="f-gerente" class="input"></select>
+        </div>
+        <div class="filters__actions">
+          <button id="btn-consultar" class="btn btn--primary">
+            <i class="ti ti-search"></i> Consultar
+          </button>
+          <button id="btn-limpar" class="btn"><i class="ti ti-x"></i> Limpar filtros</button>
+        </div>
+      </div>
+
+      <div class="filters__more filters__more--center">
+        <button id="btn-abrir-filtros" class="btn btn--link btn--info" aria-expanded="false">
+          <i class="ti ti-chevron-down"></i> Abrir filtros
+        </button>
+      </div>
+
+      <!-- Filtros avançados (slider) -->
+      <div id="advanced-filters" class="adv" aria-hidden="true">
+        <div class="adv__grid">
+          <div class="filters__group">
+            <label>Agência</label>
+            <select id="f-agencia" class="input"></select>
+          </div>
+          <div class="filters__group">
+            <label>Gerente de gestão</label>
+            <select id="f-ggestao" class="input"></select>
+          </div>
+          <div class="filters__group">
+            <label>Família de produtos</label>
+            <select id="f-familia" class="input"></select>
+          </div>
+          <!-- Grupo de produtos REMOVIDO -->
+          <div class="filters__group">
+            <label>Produto</label>
+            <select id="f-produto" class="input"></select>
+          </div>
+          <!-- STATUS/Subproduto ficam no avançado; campo de contrato foi REMOVIDO daqui -->
+          <div class="filters__group">
+            <label>Subproduto</label>
+            <select id="f-subproduto" class="input">
+              <option value="">Todos</option>
+              <option>Aplicação</option><option>Resgate</option><option>A vista</option><option>Parcelado</option>
+            </select>
+          </div>
+          <div class="filters__group">
+            <label>Status dos indicadores</label>
+            <select id="f-status-kpi" class="input">
+              <option value="todos" selected>Todos</option>
+              <option value="atingidos">Atingidos</option>
+              <option value="nao">Não atingidos</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TABS -->
+    <section class="tabs">
+      <button class="tab is-active" data-view="cards">Resumo</button>
+      <button class="tab" data-view="table">Detalhamento</button>
+      <button class="tab" data-view="exec">Visão executiva</button>
+      <div class="tabs__aside">
+        <small class="muted"><span id="lbl-atualizacao"></span></small>
+      </div>
+    </section>
+
+    <!-- VIEW: RESUMO (só cards) -->
+    <section id="view-cards">
+      <div id="grid-familias" class="cards-grid"></div>
+    </section>
+
+    <!-- VIEW: DETALHAMENTO (tabela) -->
+    <section id="view-table" class="hidden">
+      <section id="table-section" class="card card--table">
+        <header class="card__header">
+          <h3>Detalhamento</h3>
+          <div class="card__actions">
+            <input id="busca" class="input input--sm" type="search" placeholder="Buscar gerente/agência…"/>
+            <!-- Campo de contrato AGORA é da TABELA -->
+            <input id="f-contrato-table" class="input input--sm" type="search" placeholder="Contrato (Ex.: CT-2025-001234)"/>
+          </div>
+        </header>
+        <div id="gridRanking"></div>
+      </section>
+    </section>
+
+    <!-- VIEW: VISÃO EXECUTIVA -->
+    <section id="view-exec" class="hidden">
+      <section class="card">
+        <header class="card__header">
+          <h3>Visão executiva</h3>
+        </header>
+        <p class="muted">Em breve.</p>
+      </section>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Bradesco POBJ • v1.0 </span>
+  </footer>
+
+  <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+  <script src="script.v2.js"></script>
+</body>
+</html>
