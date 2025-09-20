@@ -1403,8 +1403,8 @@ function ensureExecStyles(){
     .exec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
     .seg-mini.segmented{padding:2px;border-radius:8px}
     .seg-mini .seg-btn{padding:6px 8px;font-size:12px}
-    .exec-chart{background:#fff;border:1px solid var(--stroke);border-radius:14px;box-shadow:var(--shadow);padding:12px}
-    .chart{width:100%;overflow:hidden}
+    .exec-chart{background:#fff;border:1px solid var(--stroke);border-radius:14px;box-shadow:var(--shadow);padding:20px}
+    .chart{width:100%;overflow:hidden;padding:20px;border-radius:12px;background:#fff}
     .chart svg{display:block;width:100%;height:auto}
     .chart-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
     .legend-item{display:inline-flex;align-items:center;gap:6px;color:#475569;font-weight:700}
@@ -1421,103 +1421,50 @@ function ensureExecStyles(){
 function createExecutiveView(){
   ensureExecStyles();
 
-  let host = document.getElementById("view-exec");
-  if(!host){
-    host = document.createElement("section");
-    host.id = "view-exec";
-    host.className = "hidden view-panel";
-    document.querySelector(".container")?.appendChild(host);
+  const host = document.getElementById("view-exec");
+  if (!host) return;
+
+  if (!state.exec) {
+    state.exec = { rankMode: "top", statusMode: "quase", chartMode: "diario" };
   }
+  state.exec.rankMode  = state.exec.rankMode  || "top";
+  state.exec.statusMode= state.exec.statusMode|| "quase";
+  state.exec.chartMode = state.exec.chartMode || "diario";
 
-  // se já montei, não refaço o DOM (só re-renderizo os dados)
-  if (host.querySelector("#exec-kpis")) return;
-
-  host.innerHTML = `
-    <section class="card card--exec">
-      <header class="card__header exec-head">
-        <div class="title-subtitle">
-          <!-- sem título -->
-          <div class="muted" id="exec-context"></div>
-        </div>
-      </header>
-
-      <!-- KPIs topo -->
-      <div id="exec-kpis" class="exec-kpis"></div>
-
-      <!-- Gráfico de evolução -->
-      <section class="exec-panel exec-span-2 exec-chart">
-        <div class="exec-h"><span id="exec-chart-title">Evolução do mês</span></div>
-        <div id="exec-chart" class="chart" role="img" aria-label="Evolução diária com linhas de meta e realizado"></div>
-        <div class="chart-legend">
-          <span class="legend-item"><span class="legend-swatch legend-swatch--bars"></span>Diário realizado (barras)</span>
-          <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado acumulado (linha)</span>
-          <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta acumulada (linha)</span>
-        </div>
-      </section>
-
-      <div class="exec-grid">
-        <!-- Painel de ranking com toggle Top/Bottom -->
-        <section class="exec-panel" id="exec-rank-panel">
-          <div class="exec-h">
-            <span id="exec-rank-title">Desempenho por unidade</span>
-            <div class="segmented seg-mini" role="tablist" aria-label="Ordenação">
-              <button type="button" class="seg-btn is-active" data-rk="top">Top 5</button>
-              <button type="button" class="seg-btn" data-rk="bottom">Bottom 5</button>
-            </div>
-          </div>
-          <div id="exec-rank" class="rank-mini"></div>
-        </section>
-
-        <!-- Painel de status com 3 visões -->
-        <section class="exec-panel" id="exec-status-panel">
-          <div class="exec-h">
-            <span id="exec-status-title">Status das unidades</span>
-            <div class="segmented seg-mini" role="tablist" aria-label="Status">
-              <button type="button" class="seg-btn" data-st="hit">Atingidas</button>
-              <button type="button" class="seg-btn is-active" data-st="quase">Quase lá</button>
-              <button type="button" class="seg-btn" data-st="longe">Longe</button>
-            </div>
-          </div>
-          <div id="exec-status-list" class="list-mini"></div>
-        </section>
-
-        <section class="exec-panel exec-span-2">
-          <h4 class="exec-h"><span id="exec-ritmo-title">Ritmo do mês</span></h4>
-          <div id="exec-ritmo" class="ritmo"></div>
-        </section>
-
-        <section class="exec-panel exec-span-2">
-          <h4 class="exec-h"><span id="exec-heatmap-title">Heatmap</span></h4>
-          <div id="exec-heatmap" class="hm"></div>
-        </section>
-      </div>
-    </section>`;
-
-  // estado local da executiva
-  if (!state.exec) state.exec = { rankMode: "top", statusMode: "quase" };
-
-  // listeners dos segmented da executiva
-  host.querySelectorAll('#exec-rank-panel .seg-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      host.querySelectorAll('#exec-rank-panel .seg-btn').forEach(x=>x.classList.remove('is-active'));
-      b.classList.add('is-active');
-      state.exec.rankMode = b.dataset.rk; // "top" | "bottom"
-      if (state.activeView==='exec') renderExecutiveView();
+  const syncSegmented = (containerSelector, dataAttr, stateKey, fallback) => {
+    const container = host.querySelector(containerSelector);
+    if (!container) return;
+    const buttons = container.querySelectorAll('.seg-btn');
+    if (!buttons.length) return;
+    const active = state.exec[stateKey] || fallback;
+    buttons.forEach(btn => {
+      const value = btn.dataset[dataAttr] || fallback;
+      btn.classList.toggle('is-active', value === active);
+      if (!btn.dataset.execBound) {
+        btn.dataset.execBound = 'true';
+        btn.addEventListener('click', () => {
+          state.exec[stateKey] = value;
+          buttons.forEach(b => b.classList.toggle('is-active', b === btn));
+          if (state.activeView === 'exec') renderExecutiveView();
+        });
+      }
     });
-  });
-  host.querySelectorAll('#exec-status-panel .seg-btn').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      host.querySelectorAll('#exec-status-panel .seg-btn').forEach(x=>x.classList.remove('is-active'));
-      b.classList.add('is-active');
-      state.exec.statusMode = b.dataset.st; // "hit" | "quase" | "longe"
-      if (state.activeView==='exec') renderExecutiveView();
-    });
-  });
+  };
 
-  // filtros disparando re-render quando a aba executiva estiver aberta
-  const execSel = ["#f-segmento","#f-diretoria","#f-gerencia","#f-agencia","#f-ggestao","#f-gerente","#f-familia","#f-subproduto","#f-status-kpi"];
-  execSel.forEach(sel => $(sel)?.addEventListener("change", ()=>{ if (state.activeView==='exec') renderExecutiveView(); }));
-  $("#btn-consultar")?.addEventListener("click", ()=>{ if (state.activeView==='exec') renderExecutiveView(); });
+  syncSegmented('#exec-rank-panel', 'rk', 'rankMode', 'top');
+  syncSegmented('#exec-status-panel', 'st', 'statusMode', 'quase');
+  syncSegmented('#exec-chart-toggle', 'chart', 'chartMode', 'diario');
+
+  if (!host.dataset.execFiltersBound) {
+    const execSel = ["#f-segmento","#f-diretoria","#f-gerencia","#f-agencia","#f-ggestao","#f-gerente","#f-familia","#f-subproduto","#f-status-kpi"];
+    execSel.forEach(sel => $(sel)?.addEventListener("change", () => {
+      if (state.activeView === 'exec') renderExecutiveView();
+    }));
+    $("#btn-consultar")?.addEventListener("click", () => {
+      if (state.activeView === 'exec') renderExecutiveView();
+    });
+    host.dataset.execFiltersBound = "true";
+  }
 }
 
 /* Helpers de agregação para a Visão Executiva */
@@ -1599,12 +1546,20 @@ function makeDailySeries(totalMeta, totalReal, startISO, endISO){
   const labels = days.map(d=> String(d.getUTCDate()).padStart(2,"0"));
   return { labels, dailyReal, cumMeta, cumReal };
 }
+
+function chartDimensions(container, fallbackW=900, fallbackH=260){
+  if (!container) return { width: fallbackW, height: fallbackH };
+  const styles = window.getComputedStyle(container);
+  const padL = parseFloat(styles.paddingLeft) || 0;
+  const padR = parseFloat(styles.paddingRight) || 0;
+  const width = Math.max(320, (container.clientWidth || fallbackW) - padL - padR);
+  return { width, height: fallbackH };
+}
 function buildExecChart(container, series){
-  const W = container.clientWidth || 900;
-  const H = 260;
-  const m = { t:18, r:18, b:26, l:52 };
-  const iw = W - m.l - m.r;
-  const ih = H - m.t - m.b;
+  const { width: W, height: H } = chartDimensions(container);
+  const m = { t:20, r:20, b:36, l:64 };
+  const iw = Math.max(0, W - m.l - m.r);
+  const ih = Math.max(0, H - m.t - m.b);
 
   const n = series.labels.length;
   const maxY = Math.max(...series.cumMeta, ...series.cumReal) * 1.10 || 1;
@@ -1651,6 +1606,95 @@ function buildExecChart(container, series){
     </svg>`;
 }
 
+function monthKeyLabel(key){
+  if (!key) return "—";
+  const [y,m] = key.split('-');
+  const year = Number(y);
+  const month = Number(m);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return key;
+  const dt = new Date(Date.UTC(year, month - 1, 1));
+  return dt.toLocaleDateString("pt-BR", { month: "short", year: "numeric" }).replace(".", "");
+}
+
+function makeMonthlySeries(rows, period){
+  const map = new Map();
+  const fallback = (period?.start || todayISO()).slice(0, 7);
+
+  rows.forEach(r => {
+    let src = r?.data || r?.dataReferencia || r?.dt;
+    if (src instanceof Date) src = isoFromUTCDate(src);
+    let key = "";
+    if (typeof src === "string" && src.length >= 7){
+      key = src.slice(0,7);
+    }
+    if (!key) key = fallback;
+
+    const agg = map.get(key) || { meta:0, real:0 };
+    agg.meta += (r.meta_mens ?? r.meta ?? 0);
+    agg.real += (r.real_mens ?? r.realizado ?? 0);
+    map.set(key, agg);
+  });
+
+  if (!map.size){
+    map.set(fallback, { meta:0, real:0 });
+  }
+
+  const ordered = [...map.entries()].sort((a,b)=> a[0].localeCompare(b[0]));
+  return {
+    labels: ordered.map(([key])=> monthKeyLabel(key)),
+    meta:   ordered.map(([,v])=> v.meta),
+    real:   ordered.map(([,v])=> v.real)
+  };
+}
+
+function buildExecMonthlyChart(container, series){
+  const { width: W, height: H } = chartDimensions(container);
+  const m = { t:20, r:20, b:42, l:64 };
+  const iw = Math.max(0, W - m.l - m.r);
+  const ih = Math.max(0, H - m.t - m.b);
+  const maxY = Math.max(...series.meta, ...series.real) * 1.1 || 1;
+  const n = series.labels.length;
+  const band = iw / Math.max(1, n);
+  const gap = Math.min(24, band * 0.3);
+  const barW = Math.max(12, (band - gap) / 2);
+
+  const xBase = i => m.l + band * i + gap/2;
+  const y = v => m.t + ih - (v / maxY) * ih;
+
+  const barsMeta = series.meta.map((v,i)=>
+    `<rect x="${xBase(i)}" y="${y(v)}" width="${barW}" height="${Math.max(0, y(0)-y(v))}" fill="#93c5fd" stroke="#60a5fa"/>`
+  ).join("");
+  const barsReal = series.real.map((v,i)=>
+    `<rect x="${xBase(i)+barW}" y="${y(v)}" width="${barW}" height="${Math.max(0, y(0)-y(v))}" fill="#86efac" stroke="#4ade80"/>`
+  ).join("");
+
+  const gy = [];
+  for(let k=0;k<=4;k++){
+    const val = (maxY/4)*k;
+    gy.push({ y: y(val), label: fmtBRL.format(Math.round(val)) });
+  }
+
+  const gridY = gy.map(g =>
+    `<line x1="${m.l}" y1="${g.y}" x2="${W-m.r}" y2="${g.y}" stroke="#eef2f7"/>
+     <text x="${m.l-6}" y="${g.y+3}" font-size="10" text-anchor="end" fill="#6b7280">${g.label}</text>`
+  ).join("");
+
+  const xlabels = series.labels.map((lab,i)=> {
+    const cx = m.l + band * i + band/2;
+    return `<text x="${cx}" y="${H-6}" font-size="10" text-anchor="middle" fill="#6b7280">${lab}</text>`;
+  }).join("");
+
+  container.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="barras mensais de meta e realizado">
+      <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
+      ${gridY}
+      ${barsMeta}
+      ${barsReal}
+      <line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" stroke="#e5e7eb"/>
+      ${xlabels}
+    </svg>`;
+}
+
 /* ===== Render principal da Visão Executiva ===== */
 function renderExecutiveView(){
   const host = document.getElementById("view-exec"); 
@@ -1659,9 +1703,11 @@ function renderExecutiveView(){
   const ctx    = document.getElementById("exec-context");
   const kpis   = document.getElementById("exec-kpis");
   const chartC = document.getElementById("exec-chart");
+  const chartTitleEl = document.getElementById("exec-chart-title");
+  const chartLegend = document.getElementById("exec-chart-legend");
+  const chartToggle = document.getElementById("exec-chart-toggle");
   const hm     = document.getElementById("exec-heatmap");
   const rankEl = document.getElementById("exec-rank");
-  const ritmo  = document.getElementById("exec-ritmo");
   const statusList = document.getElementById("exec-status-list");
 
   if (!Array.isArray(state._rankingRaw) || !state._rankingRaw.length){
@@ -1671,6 +1717,14 @@ function renderExecutiveView(){
 
   // base com TODOS os filtros aplicados
   const rowsBase = filterRows(state._rankingRaw);
+
+  const chartMode = state.exec?.chartMode || "diario";
+  if (chartToggle){
+    chartToggle.querySelectorAll('.seg-btn').forEach(btn=>{
+      const mode = btn.dataset.chart || "diario";
+      btn.classList.toggle('is-active', mode === chartMode);
+    });
+  }
 
   // nível inicial
   const start = execStartLevelFromFilters();
@@ -1740,8 +1794,36 @@ function renderExecutiveView(){
 
   // Gráfico
   if (chartC){
-    const series = makeDailySeries(total.meta_mens, total.real_mens, state.period.start, state.period.end);
-    buildExecChart(chartC, series);
+    const renderChart = () => {
+      const mode = state.exec?.chartMode || "diario";
+      if (mode === "mensal"){
+        const monthlySeries = makeMonthlySeries(rowsBase, state.period);
+        buildExecMonthlyChart(chartC, monthlySeries);
+        chartC.setAttribute("aria-label", "Comparativo mensal entre meta e realizado");
+        if (chartTitleEl) chartTitleEl.textContent = "Evolução mensal";
+        if (chartLegend){
+          chartLegend.innerHTML = `
+            <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta mensal (barras)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado mensal (barras)</span>
+          `;
+        }
+      } else {
+        const dailySeries = makeDailySeries(total.meta_mens, total.real_mens, state.period.start, state.period.end);
+        buildExecChart(chartC, dailySeries);
+        chartC.setAttribute("aria-label", "Evolução diária com linhas de meta e realizado");
+        if (chartTitleEl) chartTitleEl.textContent = "Evolução do mês";
+        if (chartLegend){
+          chartLegend.innerHTML = `
+            <span class="legend-item"><span class="legend-swatch legend-swatch--bars"></span>Diário realizado (barras)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado acumulado (linha)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta acumulada (linha)</span>
+          `;
+        }
+      }
+    };
+
+    renderChart();
+    host.__execChartRender = renderChart;
 
     // redimensiona enquanto essa aba estiver ativa
     if (!host.__execResize){
@@ -1749,7 +1831,8 @@ function renderExecutiveView(){
       host.__execResize = () => {
         if (state.activeView !== 'exec') return;
         if (raf) cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(()=> buildExecChart(chartC, series));
+        const fn = host.__execChartRender;
+        raf = requestAnimationFrame(()=> fn && fn());
       };
       window.addEventListener('resize', host.__execResize);
     }
@@ -1794,27 +1877,6 @@ function renderExecutiveView(){
         document.querySelector('.tab[data-view="table"]')?.click();
       });
     });
-  }
-
-  // Ritmo
-  if (ritmo){
-    const ritmoOk = mediaDiaria >= necessarioDia && total.real_mens < total.meta_mens ? "ok" : (mediaDiaria>=necessarioDia ? "ok" : "warn");
-    ritmo.innerHTML = `
-      <div class="ritmo-grid">
-        <div class="ritmo-box">
-          <div class="ritmo-label">Média/dia atual</div>
-          <div class="ritmo-val">${fmtBRL.format(Math.round(mediaDiaria))}</div>
-          <div class="ritmo-bar"><span style="width:100%"></span></div>
-        </div>
-        <div class="ritmo-box">
-          <div class="ritmo-label">Necessário/dia</div>
-          <div class="ritmo-val">${fmtBRL.format(Math.round(necessarioDia))}</div>
-          <div class="ritmo-bar ritmo-need"><span style="width:100%"></span></div>
-        </div>
-        <div class="ritmo-note ${ritmoOk==='ok'?'pos':'neg'}">
-          ${ritmoOk==='ok' ? 'No ritmo para bater a meta.' : 'Abaixo do ritmo — ajuste necessário.'}
-        </div>
-      </div>`;
   }
 
   // Heatmap — (start) × Família
