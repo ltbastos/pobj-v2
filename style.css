@@ -440,6 +440,25 @@ select.input{
 .filters__actions{ display:flex; gap:8px; justify-content:flex-end; }
 .filters__more--center{ display:flex; justify-content:center; align-items:center; margin-top:6px; }
 .filters-backdrop{ display:none; }
+.filters__close{
+  position:absolute;
+  top:16px;
+  right:16px;
+  display:none;
+  width:36px;
+  height:36px;
+  border-radius:999px;
+  border:1px solid #e5e7eb;
+  background:#fff;
+  color:#0f172a;
+  box-shadow:0 12px 26px rgba(15,23,42,.12);
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  z-index:1605;
+}
+.filters__close i{ font-size:18px; }
+.filters__close:focus-visible{ outline:2px solid #2563eb; outline-offset:2px; }
 
 /* Filtros avanÃ§ados (slider) */
 .adv{ max-height:0; overflow:hidden; transition:max-height .35s ease; }
@@ -476,6 +495,7 @@ select.input{
   .filters-backdrop{ position:fixed; inset:0; background:rgba(15,20,36,.45); backdrop-filter:blur(2px); z-index:1400; display:none; }
   .filters-backdrop.is-show{ display:block; }
   body.filters-open{ overflow:hidden; }
+  .card--filters.is-mobile-open .filters__close{ display:inline-flex; }
 }
 
 @media (max-width: 768px){
@@ -1245,12 +1265,8 @@ select.input{
   .status-pill{ font-size:11px; padding:4px 10px; }
   .sim-summary{ flex-direction:column; align-items:flex-start; gap:12px; }
   .sim-total strong{ font-size:22px; }
-  .sim-progress{ width:100%; }
-  .sim-progress__track{
-    width:calc(100% - 16px);
-    margin-inline:auto;
-    max-width:100%;
-  }
+  .sim-progress{ width:100%; gap:4px; }
+  .sim-progress__track{ display:none; }
 }
 
 .scenario-table{ width:100%; border-collapse:collapse; }

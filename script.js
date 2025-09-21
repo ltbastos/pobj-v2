@@ -561,6 +561,10 @@ async function getData(){
     return isoFromUTCDate(dt);
   };
 
+  const periodYear = Number((period.start || todayISO()).slice(0, 4)) || new Date().getFullYear();
+  const endSafe = (endRef instanceof Date && !Number.isNaN(endRef.getTime())) ? endRef : null;
+  const monthsAvailable = endSafe ? Math.max(1, endSafe.getUTCMonth() + 1) : 12;
+
   // MOCK
   const sections = CARD_SECTIONS_DEF.map(sec=>{
     const items = sec.items.map(it=>{
@@ -632,6 +636,8 @@ async function getData(){
     const canalVenda = canaisVenda[Math.floor(Math.random()*canaisVenda.length)];
     const tipoVenda = tiposVenda[Math.floor(Math.random()*tiposVenda.length)];
     const modalidadePagamento = modalidadesVenda[Math.floor(Math.random()*modalidadesVenda.length)];
+    const monthIndex = i % monthsAvailable;
+    const competenciaMes = `${periodYear}-${String(monthIndex + 1).padStart(2, "0")}-01`;
 
     return {
       diretoria: dirMeta.id,
@@ -658,6 +664,7 @@ async function getData(){
       meta:      meta_mens,
       qtd:       Math.round(50 + Math.random()*1950),
       data:      randomPeriodISO(),
+      competencia: competenciaMes,
       real_mens, meta_mens, real_acum, meta_acum
     };
   });
@@ -2814,13 +2821,23 @@ function makeMonthlySeries(rows, period){
   if (!endDate) endDate = startDate;
   if (startDate > endDate) [startDate, endDate] = [endDate, startDate];
 
-  const monthStart = new Date(startDate);
-  monthStart.setUTCDate(1);
-  const monthEnd = new Date(endDate);
+  const reference = endDate || startDate;
+  const january = new Date(reference);
+  january.setUTCMonth(0, 1);
+  const monthEnd = new Date(reference);
   monthEnd.setUTCDate(1);
 
+  const keyToDate = (key) => {
+    const parts = (key || "").split("-");
+    if (parts.length < 2) return null;
+    const year = Number(parts[0]);
+    const month = Number(parts[1]);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return null;
+    return new Date(Date.UTC(year, month - 1, 1));
+  };
+
   const monthKeys = [];
-  const cursor = new Date(monthStart);
+  const cursor = new Date(january);
   while (cursor <= monthEnd) {
     monthKeys.push(monthKeyFromDate(cursor));
     cursor.setUTCMonth(cursor.getUTCMonth() + 1);
@@ -2828,9 +2845,8 @@ function makeMonthlySeries(rows, period){
   const fallbackKey = monthKeys[0] || normalizeMonthKey(startISO) || normalizeMonthKey(todayISO()) || "";
   if (!monthKeys.length && fallbackKey) monthKeys.push(fallbackKey);
 
-  const firstKey = monthKeys[0];
-  const lastKey = monthKeys[monthKeys.length - 1] || firstKey;
   const buckets = new Map(monthKeys.map(key => [key, { meta:0, real:0 }]));
+  const seenKeys = new Set();
 
   rows.forEach(r => {
     const rawDate = r?.competencia || r?.mes || r?.data || r?.dataReferencia || r?.dt;
@@ -2848,14 +2864,36 @@ function makeMonthlySeries(rows, period){
     if (!key) key = fallbackKey;
     if (!key) return;
 
-    if (firstKey && key < firstKey) return;
-    if (lastKey && key > lastKey) return;
-
+    seenKeys.add(key);
     if (!buckets.has(key)) buckets.set(key, { meta:0, real:0 });
     const agg = buckets.get(key);
     agg.meta += (r.meta_mens ?? r.meta ?? 0);
     agg.real += (r.real_mens ?? r.realizado ?? 0);
   });
+
+  if (!buckets.size && fallbackKey) {
+    buckets.set(fallbackKey, { meta:0, real:0 });
+  }
+
+  if (seenKeys.size) {
+    const sortedKeys = [...seenKeys].sort((a,b)=> a.localeCompare(b));
+    let startKey = monthKeys[0] || sortedKeys[0];
+    let endKey = monthKeys[monthKeys.length - 1] || sortedKeys[sortedKeys.length - 1];
+    if (sortedKeys[0] && (!startKey || sortedKeys[0] < startKey)) startKey = sortedKeys[0];
+    if (sortedKeys[sortedKeys.length - 1] && (!endKey || sortedKeys[sortedKeys.length - 1] > endKey)) {
+      endKey = sortedKeys[sortedKeys.length - 1];
+    }
+    const startDt = keyToDate(startKey);
+    const endDt = keyToDate(endKey);
+    if (startDt && endDt) {
+      const fillCursor = new Date(startDt);
+      while (fillCursor <= endDt) {
+        const fillKey = monthKeyFromDate(fillCursor);
+        if (!buckets.has(fillKey)) buckets.set(fillKey, { meta:0, real:0 });
+        fillCursor.setUTCMonth(fillCursor.getUTCMonth() + 1);
+      }
+    }
+  }
 
   const ordered = [...buckets.entries()].sort((a,b)=> a[0].localeCompare(b[0]));
   return {
@@ -3748,7 +3786,15 @@ function renderCampanhasView(){
   }
 
   const cycleEl = document.getElementById("camp-cycle");
-  if (cycleEl) cycleEl.textContent = sprint.cycle || "";
+  if (cycleEl) {
+    const selectedLabel = sprint.label || sprint.cycle || "";
+    cycleEl.textContent = selectedLabel;
+    if (sprint.cycle && sprint.cycle !== selectedLabel) {
+      cycleEl.setAttribute("title", sprint.cycle);
+    } else {
+      cycleEl.removeAttribute("title");
+    }
+  }
 
   const noteEl = document.getElementById("camp-note");
   if (noteEl) {
