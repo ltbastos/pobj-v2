@@ -106,6 +106,57 @@ function readCell(raw, keys){
   return "";
 }
 
+function detectCsvDelimiter(headerLine, sampleLines = []){
+  const lines = [headerLine].concat(Array.isArray(sampleLines) ? sampleLines.slice(0, 5) : []).filter(Boolean);
+  if (!lines.length) return ",";
+  const candidates = [",", ";", "\t", "|"];
+  let best = ",";
+  let bestScore = -1;
+  candidates.forEach(delim => {
+    let score = 0;
+    lines.forEach(line => {
+      const pieces = line.split(delim);
+      if (pieces.length > 1){
+        score += pieces.length - 1;
+      }
+    });
+    if (score > bestScore){
+      best = delim;
+      bestScore = score;
+    }
+  });
+  if (bestScore <= 0){
+    if (headerLine?.includes(";")) return ";";
+    if (headerLine?.includes("\t")) return "\t";
+    if (headerLine?.includes("|")) return "|";
+  }
+  return best;
+}
+
+function splitCsvLine(line, delimiter){
+  const cols = [];
+  let current = "";
+  let insideQuotes = false;
+  for (let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if (ch === '"'){
+      if (insideQuotes && line[i + 1] === '"'){
+        current += '"';
+        i += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+    } else if (ch === delimiter && !insideQuotes){
+      cols.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  cols.push(current);
+  return cols;
+}
+
 function parseCSV(text){
   if (!text) return [];
   const normalized = text.replace(/\uFEFF/g, "").replace(/\r\n?/g, "\n");
@@ -113,10 +164,11 @@ function parseCSV(text){
   if (!lines.length) return [];
   const header = lines.shift();
   if (!header) return [];
-  const headers = header.split(",").map(h => sanitizeText(h));
+  const delimiter = detectCsvDelimiter(header, lines);
+  const headers = splitCsvLine(header, delimiter).map(h => sanitizeText(h));
   const rows = [];
   for (const line of lines){
-    const cols = line.split(",");
+    const cols = splitCsvLine(line, delimiter);
     if (!cols.length) continue;
     const obj = {};
     headers.forEach((key, idx) => {
