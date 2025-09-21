@@ -1,0 +1,18 @@
+Familia de produtos,Id familia,Produto,Id produto
+CAPTAÇÃO,captacao,Captação Bruta,captacao_bruta
+CAPTAÇÃO,captacao,Captação Líquida,captacao_liquida
+CAPTAÇÃO,captacao,Portabilidade de Previdência Privada,portab_prev
+CAPTAÇÃO,captacao,Centralização de Caixa,centralizacao
+FINANCEIRO,financeiro,Recuperação de Vencidos até 59 dias,rec_vencidos_59
+FINANCEIRO,financeiro,Recuperação de Vencidos acima de 50 dias,rec_vencidos_50mais
+FINANCEIRO,financeiro,Recuperação de Crédito,rec_credito
+CRÉDITO,credito,Produção de Crédito PJ,prod_credito_pj
+CRÉDITO,credito,Limite Rotativo PJ (Volume),rotativo_pj_vol
+CRÉDITO,credito,Limite Rotativo PJ (Quantidade),rotativo_pj_qtd
+LIGADAS,ligadas,Cartões,cartoes
+LIGADAS,ligadas,Consórcios,consorcios
+LIGADAS,ligadas,Seguros,seguros
+PRODUTIVIDADE,produtividade,Sucesso de Equipe Crédito,sucesso_equipe_credito
+CLIENTES,clientes,Conquista Qualificada Gerenciado PJ,conquista_qualif_pj
+CLIENTES,clientes,Conquista de Clientes Folha de Pagamento,conquista_folha
+CLIENTES,clientes,Bradesco Expresso,bradesco_expresso
