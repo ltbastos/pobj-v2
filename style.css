@@ -584,6 +584,7 @@ select.input{
   gap:12px;
   width:100%;
   min-width:0;
+  --bar-anim-duration:.7s;
 }
 .hitbar__track{
   position:relative;
@@ -595,7 +596,8 @@ select.input{
   border:1px solid #e5e7eb;
   overflow:hidden;
 }
-.hitbar__fill{ position:absolute; left:0; top:0; bottom:0; width:0%; background:#bbf7d0; }
+.hitbar__fill{ position:absolute; left:0; top:0; bottom:0; width:var(--target, 0%); background:#bbf7d0; transform-origin:left center; transform:scaleX(1); will-change:transform; }
+.hitbar.is-animating .hitbar__fill{ animation:bar-fill-grow var(--bar-anim-duration, .7s) cubic-bezier(0.25,0.9,0.3,1.2) forwards; }
 .hitbar--low  .hitbar__fill{ background:#fecaca; }
 .hitbar--warn .hitbar__fill{ background:#fed7aa; }
 .hitbar strong{
@@ -603,6 +605,11 @@ select.input{
   font-weight:800;
   color:#111827;
   white-space:nowrap;
+}
+
+@keyframes bar-fill-grow{
+  from{ transform:scaleX(0); }
+  to{ transform:scaleX(1); }
 }
 @media (max-width: 900px){
   .kpi-pill{ flex:1 1 100%; min-width:100%; }
@@ -688,6 +695,7 @@ select.input{
   background:#f8fafc;
   padding:0 12px;
   overflow:hidden;
+  --bar-anim-duration:.85s;
 }
 .prod-card__var-fill{
   position:absolute;
@@ -695,11 +703,15 @@ select.input{
   top:3px;
   bottom:3px;
   border-radius:999px;
-  transition:width .28s ease;
+  width:var(--target, 0%);
+  transform-origin:left center;
+  transform:scaleX(1);
+  will-change:transform;
 }
 .prod-card__var-track.var--low .prod-card__var-fill{ background:#fecaca; }
 .prod-card__var-track.var--warn .prod-card__var-fill{ background:#fed7aa; }
 .prod-card__var-track.var--ok .prod-card__var-fill{ background:#bbf7d0; }
+.prod-card__var-track.is-animating .prod-card__var-fill{ animation:bar-fill-grow var(--bar-anim-duration, .85s) cubic-bezier(0.25,0.9,0.3,1.2) forwards; }
 .prod-card__var-label{ 
   position:relative;
   font-size:12px;
@@ -1263,8 +1275,9 @@ select.input{
 .sim-total strong{ font-size:24px; color:#0f172a; }
 
 .sim-progress{ flex:1 1 200px; display:flex; flex-direction:column; gap:6px; min-width:0; }
-.sim-progress__track{ width:100%; height:10px; border-radius:999px; background:#e5e7eb; overflow:hidden; }
-.sim-progress__track span{ display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg, #b30000, #f97316); transition:width .25s ease; }
+.sim-progress__track{ width:100%; height:10px; border-radius:999px; background:#e5e7eb; overflow:hidden; --bar-anim-duration:.6s; }
+.sim-progress__fill{ display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg, #b30000, #f97316); width:var(--target, 0%); transform-origin:left center; transform:scaleX(1); will-change:transform; }
+.sim-progress__track.is-animating .sim-progress__fill{ animation:bar-fill-grow var(--bar-anim-duration, .6s) cubic-bezier(0.25,0.9,0.3,1.2) forwards; }
 .sim-progress small{ font-size:12px; color:#6b7280; font-weight:600; }
 
 .sim-footnote{ margin:0; text-align:center; font-size:12px; }

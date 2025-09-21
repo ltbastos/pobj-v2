@@ -856,9 +856,54 @@ const state = {
     teamPreset:{},
     individualProfile: CAMPAIGN_SPRINTS[0]?.individual?.profiles?.[0]?.id || null,
     individualValues:{},
-    individualPreset:{}
+    individualPreset:{},
+  },
+
+  animations:{
+    resumo:{
+      kpiKey:null,
+      varRatios:new Map(),
+    },
+    campanhas:{
+      team:new Map(),
+      individual:new Map(),
+    },
   }
 };
+
+function prefersReducedMotion(){
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (err) {
+    return false;
+  }
+}
+
+function isDOMElement(value){
+  return !!value && typeof value === 'object' && 'classList' in value;
+}
+
+function triggerBarAnimation(targets, shouldAnimate, className = 'is-animating'){
+  const iterable = targets && typeof targets[Symbol.iterator] === 'function';
+  const list = !targets ? [] : (Array.isArray(targets) ? targets : (iterable && !isDOMElement(targets) ? Array.from(targets) : [targets]));
+  list.forEach(el => {
+    if (!isDOMElement(el)) return;
+    el.classList.remove(className);
+    if (!shouldAnimate || prefersReducedMotion()) return;
+    void el.offsetWidth;
+    el.classList.add(className);
+    const cleanup = () => el.classList.remove(className);
+    el.addEventListener('animationend', cleanup, { once:true });
+    el.addEventListener('animationcancel', cleanup, { once:true });
+  });
+}
+
+function shouldAnimateDelta(prev, next, tolerance = 0.1){
+  if (prev == null || !Number.isFinite(prev)) return true;
+  if (next == null || !Number.isFinite(next)) return false;
+  return Math.abs(prev - next) > tolerance;
+}
 
 const contractSuggestState = { items: [], highlight: -1, open: false, term: "", pending: null };
 let contractSuggestDocBound = false;
@@ -2253,6 +2298,18 @@ function renderResumoKPI(summary, context = {}) {
     ? toNumber(summary.varAtingido)
     : (visibleVarAtingido != null ? toNumber(visibleVarAtingido) : Math.round(varTotalBase * (summary.varPct || 0)));
 
+  const resumoAnim = state.animations?.resumo;
+  const keyParts = [
+    Math.round(indicadoresAtingidos || 0),
+    Math.round(indicadoresTotal || 0),
+    Math.round(pontosAtingidos || 0),
+    Math.round(pontosTotal || 0),
+    Math.round(varAtingidoBase || 0),
+    Math.round(varTotalBase || 0)
+  ];
+  const nextResumoKey = keyParts.join('|');
+  const shouldAnimateResumo = resumoAnim?.kpiKey !== nextResumoKey;
+
   const formatDisplay = (type, value) => type === "brl" ? formatBRLReadable(value) : formatIntReadable(value);
   const formatFull = (type, value) => {
     const n = Math.round(toNumber(value));
@@ -2271,6 +2328,7 @@ function renderResumoKPI(summary, context = {}) {
     const pct100 = Math.max(0, Math.min(100, pctRaw));
     const hbClass = hitbarClass(pctRaw);
     const pctLabel = `${pctRaw.toFixed(1)}%`;
+    const fillTarget = pct100.toFixed(2);
     const atgTitle = buildTitle("Atingidos", fmtType, atingidos, visibleAting);
     const totTitle = buildTitle("Total", fmtType, total, visibleTotal);
     return `
@@ -2286,7 +2344,7 @@ function renderResumoKPI(summary, context = {}) {
           </div>
         </div>
         <div class="hitbar ${hbClass}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct100.toFixed(1)}" aria-valuetext="${titulo}: ${pctLabel}">
-          <span class="hitbar__track"><span class="hitbar__fill" style="width:${pct100}%"></span></span>
+          <span class="hitbar__track"><span class="hitbar__fill" style="--target:${fillTarget}%"></span></span>
           <strong title="${pctLabel}">${pctLabel}</strong>
         </div>
       </div>`;
@@ -2297,6 +2355,9 @@ function renderResumoKPI(summary, context = {}) {
     buildCard("Pontos", "ti ti-medal", pontosAtingidos, pontosTotal, "int", visiblePointsHit),
     buildCard("Variável", "ti ti-cash", varAtingidoBase, varTotalBase, "brl", visibleVarAtingido, visibleVarMeta)
   ].join("");
+
+  triggerBarAnimation(kpi.querySelectorAll('.hitbar'), shouldAnimateResumo);
+  if (resumoAnim) resumoAnim.kpiKey = nextResumoKey;
 }
 
 /* ===== Tooltip dos cards ===== */
@@ -2395,6 +2456,10 @@ function renderFamilias(sections, summary){
   host.style.display = "block";
   host.style.gap = "0";
 
+  const resumoAnim = state.animations?.resumo;
+  const prevVarRatios = resumoAnim?.varRatios instanceof Map ? resumoAnim.varRatios : new Map();
+  const nextVarRatios = new Map();
+
   const status = getStatusFilter();
   const produtoFilterId = $("#f-familia")?.value || "Todas";
 
@@ -2468,6 +2533,7 @@ function renderFamilias(sections, summary){
       const varPct = Math.max(0, varRatio * 100);
       const varPctLabel = `${varPct.toFixed(1)}%`;
       const varFillPct = Math.max(0, Math.min(100, varPct));
+      const varFillRounded = Number(varFillPct.toFixed(2));
       const varTrackClass = varPct < 50 ? "var--low" : (varPct < 100 ? "var--warn" : "var--ok");
       const varRealCompact = formatCompactBRL(variavelReal);
       const varMetaCompact = formatCompactBRL(variavelMeta);
@@ -2503,7 +2569,7 @@ function renderFamilias(sections, summary){
               <strong title="${varPctLabel}">${varPctLabel}</strong>
             </div>
             <div class="prod-card__var-track ${varTrackClass}" role="progressbar" aria-valuemin="0" aria-valuemax="150" aria-valuenow="${Math.round(Math.min(varPct,150))}" aria-valuetext="${varAccessible}" aria-label="Atingimento da remuneração variável">
-              <span class="prod-card__var-fill" style="width:${varFillPct}%"></span>
+              <span class="prod-card__var-fill" style="--target:${varFillRounded}%"></span>
               <span class="prod-card__var-label prod-card__var-label--current" title="${fmtBRL.format(Math.round(variavelReal))}">${varRealCompact}</span>
               <span class="prod-card__var-label prod-card__var-label--target" title="${fmtBRL.format(Math.round(variavelMeta))}">${varMetaCompact}</span>
             </div>
@@ -2513,10 +2579,22 @@ function renderFamilias(sections, summary){
           ${buildCardTooltipHTML(f)}
         </article>
       `);
+      nextVarRatios.set(f.id, varFillRounded);
+      const cardEl = grid.lastElementChild;
+      if (cardEl) {
+        const trackEl = cardEl.querySelector(".prod-card__var-track");
+        if (trackEl) {
+          const prevRatio = prevVarRatios.get(f.id);
+          const animateVar = shouldAnimateDelta(prevRatio, varFillRounded, 0.25);
+          triggerBarAnimation(trackEl, animateVar);
+        }
+      }
     });
 
     host.appendChild(sectionEl);
   });
+
+  if (resumoAnim) resumoAnim.varRatios = nextVarRatios;
 
   renderResumoKPI(summary, {
     visibleItemsHitCount: atingidosVisiveis,
@@ -3488,7 +3566,7 @@ function buildTeamSimulator(container, sprint){
         <strong id="team-total-points"></strong>
       </div>
       <div class="sim-progress">
-        <div class="sim-progress__track"><span id="team-progress-bar"></span></div>
+        <div class="sim-progress__track"><span class="sim-progress__fill" id="team-progress-bar"></span></div>
         <small id="team-progress-label"></small>
       </div>
       <div class="sim-outcome">
@@ -3560,7 +3638,20 @@ function updateTeamSimulator(container, sprint){
   const progressBar = container.querySelector("#team-progress-bar");
   if (progressBar) {
     const pct = Math.max(0, Math.min(100, Math.round(result.progressPct * 100)));
-    progressBar.style.width = `${pct}%`;
+    progressBar.style.width = "";
+    progressBar.style.setProperty("--target", `${pct}%`);
+    const trackEl = progressBar.parentElement;
+    if (trackEl) {
+      let animateBar = true;
+      const teamMap = state.animations?.campanhas?.team;
+      const sprintKey = sprint?.id || "__default__";
+      if (teamMap instanceof Map) {
+        const prev = teamMap.get(sprintKey);
+        animateBar = shouldAnimateDelta(prev, pct, 0.5);
+        teamMap.set(sprintKey, pct);
+      }
+      triggerBarAnimation(trackEl, animateBar);
+    }
   }
   const progressLabel = container.querySelector("#team-progress-label");
   if (progressLabel) progressLabel.textContent = result.progressLabel;
@@ -3627,7 +3718,7 @@ function buildIndividualSimulator(container, sprint, profile){
         <strong id="individual-total-points"></strong>
       </div>
       <div class="sim-progress">
-        <div class="sim-progress__track"><span id="individual-progress-bar"></span></div>
+        <div class="sim-progress__track"><span class="sim-progress__fill" id="individual-progress-bar"></span></div>
         <small id="individual-progress-label"></small>
       </div>
       <div class="sim-outcome">
@@ -3716,7 +3807,22 @@ function updateIndividualSimulator(container, sprint, profile){
   const progressBar = container.querySelector("#individual-progress-bar");
   if (progressBar) {
     const pct = Math.max(0, Math.min(100, Math.round(result.progressPct * 100)));
-    progressBar.style.width = `${pct}%`;
+    progressBar.style.width = "";
+    progressBar.style.setProperty("--target", `${pct}%`);
+    const trackEl = progressBar.parentElement;
+    if (trackEl) {
+      let animateBar = true;
+      const individualMap = state.animations?.campanhas?.individual;
+      const sprintKey = sprint?.id || "__default__";
+      const profileKey = profile?.id || "__profile__";
+      const animKey = `${sprintKey}:${profileKey}`;
+      if (individualMap instanceof Map) {
+        const prev = individualMap.get(animKey);
+        animateBar = shouldAnimateDelta(prev, pct, 0.5);
+        individualMap.set(animKey, pct);
+      }
+      triggerBarAnimation(trackEl, animateBar);
+    }
   }
   const progressLabel = container.querySelector("#individual-progress-label");
   if (progressLabel) progressLabel.textContent = result.progressLabel;
