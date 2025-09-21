@@ -22,6 +22,9 @@ const $$ = (s) => document.querySelectorAll(s);
 const fmtBRL = new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" });
 const fmtINT = new Intl.NumberFormat("pt-BR");
 const fmtONE = new Intl.NumberFormat("pt-BR", { minimumFractionDigits:1, maximumFractionDigits:1 });
+const EXEC_BAR_FILL = "#60a5fa";
+const EXEC_BAR_STROKE = "#3b82f6";
+const EXEC_META_COLOR = "#ef4444";
 const setActiveTab = (viewId = "cards") => {
   const tabs = Array.from($$(".tab"));
   const target = tabs.some(tab => (tab.dataset.view || "") === viewId) ? viewId : "cards";
@@ -2698,21 +2701,31 @@ function levelLabel(start){
 function makeDailySeries(totalMeta, totalReal, startISO, endISO){
   const s = dateUTCFromISO(startISO), e = dateUTCFromISO(endISO);
   const days = [];
-  for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate()+1)) days.push(new Date(d));
-  const isBiz = d => (d.getUTCDay() !== 0 && d.getUTCDay() !== 6);
-  const bizIdx = days.map((d,i)=> isBiz(d) ? i : -1).filter(i=>i>=0);
-  const nBiz = bizIdx.length || 1;
+  if (s && e){
+    for (let d = new Date(s); d <= e; d.setUTCDate(d.getUTCDate()+1)){
+      const current = new Date(d);
+      const dow = current.getUTCDay();
+      if (dow === 0 || dow === 6) continue; // somente dias úteis
+      days.push(current);
+    }
+  }
+
+  if (!days.length && s){
+    const fallback = new Date(s);
+    days.push(fallback);
+  }
+
+  const nBiz = days.length || 1;
 
   // meta igualmente distribuída em dias úteis
   const perMeta = totalMeta / nBiz;
-  const dailyMeta = days.map(d => isBiz(d) ? perMeta : 0);
+  const dailyMeta = days.map(() => perMeta);
 
   // realizado com variação e normalização ao total
-  let rnd = bizIdx.map(()=> 0.6 + Math.random()*1.1);
+  let rnd = days.map(()=> 0.6 + Math.random()*1.1);
   const rndSum = rnd.reduce((a,b)=>a+b,0) || 1;
   rnd = rnd.map(x=> x / rndSum);
-  const dailyReal = days.map(()=>0);
-  bizIdx.forEach((idx,i)=>{ dailyReal[idx] = totalReal * rnd[i]; });
+  const dailyReal = days.map((_,i)=> totalReal * rnd[i]);
 
   const labels = days.map(d=> String(d.getUTCDate()).padStart(2,"0"));
   return { labels, dailyReal, dailyMeta };
@@ -2751,12 +2764,26 @@ function buildExecChart(container, series){
   }
 
   const path = (arr)=> arr.map((v,i)=> `${i?"L":"M"} ${x(i)} ${y(v)}`).join(" ");
-  const bars = series.dailyReal.map((v,i)=>
-    `<rect x="${x(i)-barW/2}" y="${y(v)}" width="${barW}" height="${Math.max(0, y(0)-y(v))}" fill="#2563eb" fill-opacity="0.7" stroke="#1d4ed8" stroke-width="1.4" rx="2"/>`
-  ).join("");
+  const bars = series.dailyReal.map((v,i)=> {
+    const height = Math.max(0, y(0) - y(v));
+    const day = series.labels?.[i] || String(i + 1).padStart(2, "0");
+    const valueLabel = formatBRLReadable(v);
+    return `<rect x="${x(i)-barW/2}" y="${y(v)}" width="${barW}" height="${height}" fill="${EXEC_BAR_FILL}" stroke="${EXEC_BAR_STROKE}" stroke-width="1.2" rx="3"><title>Realizado dia ${day}: ${valueLabel}</title></rect>`;
+  }).join("");
 
-  const lineMeta = `<path d="${path(series.dailyMeta)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
-  const metaPoints = series.dailyMeta.map((v,i)=> `<circle cx="${x(i)}" cy="${y(v)}" r="2.6" fill="#2563eb" stroke="#fff" stroke-width="1"/>`).join("");
+  const barLabels = series.dailyReal.map((v,i)=> {
+    if (v <= 0) return "";
+    const text = formatBRLReadable(v);
+    const ty = Math.max(m.t + 12, y(v) - 6);
+    return `<text x="${x(i)}" y="${ty}" font-size="10" font-weight="700" text-anchor="middle" fill="#1f2937">${text}</text>`;
+  }).join("");
+
+  const lineMeta = `<path d="${path(series.dailyMeta)}" fill="none" stroke="${EXEC_META_COLOR}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 3" />`;
+  const metaPoints = series.dailyMeta.map((v,i)=> {
+    const day = series.labels?.[i] || String(i + 1).padStart(2, "0");
+    const valueLabel = formatBRLReadable(v);
+    return `<circle cx="${x(i)}" cy="${y(v)}" r="2.8" fill="${EXEC_META_COLOR}" stroke="#fff" stroke-width="1.2"><title>Meta dia ${day}: ${valueLabel}</title></circle>`;
+  }).join("");
 
   const xlabels = series.labels.map((lab,i) =>
     `<text x="${x(i)}" y="${axisY + 16}" font-size="9" text-anchor="middle" fill="#6b7280">${lab}</text>`
@@ -2772,6 +2799,7 @@ function buildExecChart(container, series){
       <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
       ${gridY}
       ${bars}
+      ${barLabels}
       ${lineMeta}
       ${metaPoints}
       <line x1="${m.l}" y1="${axisY}" x2="${W-m.r}" y2="${axisY}" stroke="#e5e7eb"/>
@@ -2913,11 +2941,12 @@ function buildExecMonthlyChart(container, series){
   const xCenter = i => m.l + band * i + band/2;
   const xBar = i => xCenter(i) - barW/2;
   const y = v => m.t + ih - (v / maxY) * ih;
-  const baseColor = "#2563eb";
+  const baseColor = EXEC_BAR_FILL;
 
   const barsReal = series.real.map((v,i)=> {
     const height = Math.max(0, y(0) - y(v));
-    return `<rect x="${xBar(i)}" y="${y(v)}" width="${barW}" height="${height}" fill="${baseColor}" fill-opacity="0.75" rx="4"/>`;
+    const label = formatBRLReadable(v);
+    return `<rect x="${xBar(i)}" y="${y(v)}" width="${barW}" height="${height}" fill="${baseColor}" stroke="${EXEC_BAR_STROKE}" stroke-width="1.2" rx="4"><title>Realizado mês ${series.labels?.[i] || i + 1}: ${label}</title></rect>`;
   }).join("");
 
   const barLabels = series.real.map((v,i)=> {
@@ -2927,8 +2956,11 @@ function buildExecMonthlyChart(container, series){
   }).join("");
 
   const path = (arr)=> arr.map((v,i)=> `${i?"L":"M"} ${xCenter(i)} ${y(v)}`).join(" ");
-  const metaLine = `<path d="${path(series.meta)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
-  const metaPoints = series.meta.map((v,i)=> `<circle cx="${xCenter(i)}" cy="${y(v)}" r="3" fill="#2563eb" stroke="#fff" stroke-width="1"/>`).join("");
+  const metaLine = `<path d="${path(series.meta)}" fill="none" stroke="${EXEC_META_COLOR}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 3" />`;
+  const metaPoints = series.meta.map((v,i)=> {
+    const label = formatBRLReadable(v);
+    return `<circle cx="${xCenter(i)}" cy="${y(v)}" r="3" fill="${EXEC_META_COLOR}" stroke="#fff" stroke-width="1.2"><title>Meta mês ${series.labels?.[i] || i + 1}: ${label}</title></circle>`;
+  }).join("");
 
   const gy = [];
   for(let k=0;k<=4;k++){
