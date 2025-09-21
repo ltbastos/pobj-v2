@@ -867,6 +867,7 @@ const state = {
     campanhas:{
       team:new Map(),
       individual:new Map(),
+      ranking:new Map(),
     },
   }
 };
@@ -3847,41 +3848,82 @@ function renderCampaignRanking(container, sprint, options = {}){
 
   const columnLabel = options.columnLabel || "Unidade";
   const config = sprint.team;
+  const cap = Math.max(1, toNumber(config?.cap ?? 150));
+  const prevRanking = (state.animations?.campanhas?.ranking instanceof Map)
+    ? state.animations.campanhas.ranking
+    : new Map();
+  const nextRanking = new Map();
+
+  const computeFill = (indicatorRow) => {
+    const capped = toNumber(indicatorRow?.capped);
+    if (!cap) return 0;
+    const pct = (capped / cap) * 100;
+    return Math.max(0, Math.min(100, pct));
+  };
+
   const body = rows.map((row, idx) => {
     const result = row.result || computeCampaignScore(config, { linhas: row.linhas, cash: row.cash, conquista: row.conquista });
     const linhas = result.rows.find(r => r.id === "linhas");
     const cash = result.rows.find(r => r.id === "cash");
     const conquista = result.rows.find(r => r.id === "conquista");
     const badgeClass = badgeClassFromStatus(row.finalStatus || result.finalStatus);
+    const statusText = escapeHTML(row.finalStatus || result.finalStatus || "—");
     const rank = row.rank != null ? row.rank : (idx + 1);
+    const unitKey = row.key || row.name || `row-${idx}`;
+    const safeUnitKey = escapeHTML(unitKey);
+    const safeName = escapeHTML(row.name || row.key || "—");
+
+    const linhasFill = Number(computeFill(linhas).toFixed(2));
+    const cashFill = Number(computeFill(cash).toFixed(2));
+    const conquistaFill = Number(computeFill(conquista).toFixed(2));
+
+    nextRanking.set(`${unitKey}|linhas`, linhasFill);
+    nextRanking.set(`${unitKey}|cash`, cashFill);
+    nextRanking.set(`${unitKey}|conquista`, conquistaFill);
+
+    const linhasPctLabel = escapeHTML(formatCampPercent(row.linhas));
+    const cashPctLabel = escapeHTML(formatCampPercent(row.cash));
+    const conquistaPctLabel = escapeHTML(formatCampPercent(row.conquista));
+
+    const linhasPoints = formatCampPoints(linhas?.points || 0);
+    const cashPoints = formatCampPoints(cash?.points || 0);
+    const conquistaPoints = formatCampPoints(conquista?.points || 0);
+    const totalPoints = formatCampPoints(result.totalPoints);
+
     return `
-      <tr>
+      <tr data-unit-key="${safeUnitKey}" data-rank="${rank}">
         <td class="pos-col">${rank}</td>
-        <td class="regional-col">${row.name || "—"}</td>
+        <td class="regional-col">${safeName}</td>
         <td>
           <div class="indicator-bar">
-            <div class="indicator-bar__track"><span style="width:${Math.min(100, (linhas?.capped || 0) / (config?.cap || 150) * 100)}%"></span></div>
-            <div class="indicator-bar__value">${formatCampPercent(row.linhas)}</div>
+            <div class="indicator-bar__track" data-metric="linhas" data-fill="${linhasFill.toFixed(2)}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(linhasFill)}" aria-valuetext="${linhasPctLabel}">
+              <span style="--target:${linhasFill.toFixed(2)}%;"></span>
+            </div>
+            <div class="indicator-bar__value">${linhasPctLabel}</div>
           </div>
-          <div class="indicator-bar__points">${formatCampPoints(linhas?.points || 0)}</div>
+          <div class="indicator-bar__points">${linhasPoints}</div>
         </td>
         <td>
           <div class="indicator-bar">
-            <div class="indicator-bar__track"><span style="width:${Math.min(100, (cash?.capped || 0) / (config?.cap || 150) * 100)}%"></span></div>
-            <div class="indicator-bar__value">${formatCampPercent(row.cash)}</div>
+            <div class="indicator-bar__track" data-metric="cash" data-fill="${cashFill.toFixed(2)}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(cashFill)}" aria-valuetext="${cashPctLabel}">
+              <span style="--target:${cashFill.toFixed(2)}%;"></span>
+            </div>
+            <div class="indicator-bar__value">${cashPctLabel}</div>
           </div>
-          <div class="indicator-bar__points">${formatCampPoints(cash?.points || 0)}</div>
+          <div class="indicator-bar__points">${cashPoints}</div>
         </td>
         <td>
           <div class="indicator-bar">
-            <div class="indicator-bar__track"><span style="width:${Math.min(100, (conquista?.capped || 0) / (config?.cap || 150) * 100)}%"></span></div>
-            <div class="indicator-bar__value">${formatCampPercent(row.conquista)}</div>
+            <div class="indicator-bar__track" data-metric="conquista" data-fill="${conquistaFill.toFixed(2)}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(conquistaFill)}" aria-valuetext="${conquistaPctLabel}">
+              <span style="--target:${conquistaFill.toFixed(2)}%;"></span>
+            </div>
+            <div class="indicator-bar__value">${conquistaPctLabel}</div>
           </div>
-          <div class="indicator-bar__points">${formatCampPoints(conquista?.points || 0)}</div>
+          <div class="indicator-bar__points">${conquistaPoints}</div>
         </td>
-        <td>${formatCampPoints(result.totalPoints)}</td>
+        <td>${totalPoints}</td>
         <td>${row.atividade ? "Sim" : "Não"}</td>
-        <td><span class="${badgeClass}">${row.finalStatus || result.finalStatus}</span></td>
+        <td><span class="${badgeClass}">${statusText}</span></td>
       </tr>`;
   }).join("");
 
@@ -3901,6 +3943,21 @@ function renderCampaignRanking(container, sprint, options = {}){
       </thead>
       <tbody>${body}</tbody>
     </table>`;
+
+  const rowEls = container.querySelectorAll("tbody tr[data-unit-key]");
+  rowEls.forEach(tr => {
+    const unitKey = tr.dataset.unitKey || "";
+    ["linhas", "cash", "conquista"].forEach(metric => {
+      const track = tr.querySelector(`.indicator-bar__track[data-metric="${metric}"]`);
+      if (!track) return;
+      const fillValue = Number(track.dataset.fill || track.getAttribute("data-fill") || "0");
+      const prevValue = prevRanking.get(`${unitKey}|${metric}`);
+      const animateBar = shouldAnimateDelta(prevValue, fillValue, 0.25);
+      triggerBarAnimation(track, animateBar);
+    });
+  });
+
+  state.animations.campanhas.ranking = nextRanking;
 }
 
 function renderCampanhasView(){
@@ -4226,21 +4283,43 @@ function renderTreeTable() {
   const att = (p)=>{ const pct=(p*100); const cls=pct<50?"att-low":(pct<100?"att-warn":"att-ok"); return `<span class="att-badge ${cls}">${pct.toFixed(1)}%</span>`; }
   const defas = (real,meta)=>{ const d=(real||0)-(meta||0); const cls=d>=0?"def-pos":"def-neg"; const full=fmtBRL.format(Math.round(d)); const display=formatBRLReadable(d); return `<span class="def-badge ${cls}" title="${full}">${display}</span>`; }
 
-  const buildDetailTableHTML = (groups=[]) => {
-    if (!groups || !groups.length) return "";
+  const buildDetailTableHTML = (node = null) => {
+    const groups = Array.isArray(node?.detailGroups) ? node.detailGroups : [];
+    if (!groups.length) return "";
     const fmtDate = iso => (iso ? formatBRDate(iso) : "—");
-    const rows = groups.map(g => `
+    const rows = groups.map(g => {
+      const canal = escapeHTML(g.canal || "—");
+      const tipo = escapeHTML(g.tipo || "—");
+      const gerente = escapeHTML(g.gerente || "—");
+      const modalidade = escapeHTML(g.modalidade || "—");
+      const motivo = escapeHTML(g.motivoCancelamento || "—");
+      return `
       <tr>
-        <td>${g.canal || "—"}</td>
-        <td>${g.tipo || "—"}</td>
-        <td>${g.gerente || "—"}</td>
-        <td>${g.modalidade || "—"}</td>
+        <td>${canal}</td>
+        <td>${tipo}</td>
+        <td>${gerente}</td>
+        <td>${modalidade}</td>
         <td>${fmtDate(g.dataVencimento)}</td>
         <td>${fmtDate(g.dataCancelamento)}</td>
-        <td>${g.motivoCancelamento || "—"}</td>
-      </tr>`).join("");
+        <td>${motivo}</td>
+      </tr>`;
+    }).join("");
+
+    const cancelGroup = groups.find(g => g.dataCancelamento || g.motivoCancelamento);
+    let alertHtml = "";
+    if (cancelGroup) {
+      const dateText = cancelGroup.dataCancelamento ? `Cancelado em ${fmtDate(cancelGroup.dataCancelamento)}` : "";
+      const reasonText = cancelGroup.motivoCancelamento ? cancelGroup.motivoCancelamento : "";
+      const descriptionParts = [];
+      if (dateText) descriptionParts.push(escapeHTML(dateText));
+      if (reasonText) descriptionParts.push(escapeHTML(reasonText));
+      const descriptionHtml = descriptionParts.join(" • ");
+      alertHtml = `<div class="tree-detail__alert"><i class="ti ti-alert-triangle"></i><div><strong>Venda cancelada</strong>${descriptionHtml ? `<span>${descriptionHtml}</span>` : ""}</div></div>`;
+    }
+
     return `
       <div class="tree-detail-wrapper">
+        ${alertHtml}
         <table class="detail-table">
           <thead>
             <tr>
@@ -4267,14 +4346,35 @@ function renderTreeTable() {
     const hasDetails = node.type === "contrato" && Array.isArray(node.detailGroups) && node.detailGroups.length > 0;
     let detailTr=null;
 
-    if (hasDetails) tr.classList.add("has-detail");
+    const cancelGroup = hasDetails ? node.detailGroups.find(g => g.dataCancelamento || g.motivoCancelamento) : null;
+    const isCancelled = !!cancelGroup;
 
-    const labelBase = (node.type === "contrato" || !node.detail?.gerente)
-      ? node.label
+    if (hasDetails) tr.classList.add("has-detail");
+    if (isCancelled) {
+      tr.classList.add("is-cancelled");
+      tr.dataset.cancelled = "1";
+    }
+
+    const rawLabelBase = (node.type === "contrato" || !node.detail?.gerente)
+      ? (node.label || "—")
       : `Gerente: ${node.detail.gerente}`;
+    const labelBase = escapeHTML(rawLabelBase);
+    const fallbackLabel = escapeHTML(node.label || "—");
+
+    let statusBadge = "";
+    if (isCancelled) {
+      const titleText = cancelGroup?.motivoCancelamento
+        ? `Cancelado — ${cancelGroup.motivoCancelamento}`
+        : "Cancelado";
+      const safeTitle = escapeHTML(titleText);
+      statusBadge = `<span class="tree-status tree-status--cancelled" title="${safeTitle}"><i class="ti ti-alert-triangle"></i> Cancelado</span>`;
+    }
+
     const labelHtml = node.detail
-      ? `<div class="tree-label"><span class="label-strong">${labelBase}</span></div>`
-      : `<span class="label-strong">${node.label}</span>`;
+      ? `<div class="tree-label"><span class="label-strong">${labelBase}</span>${statusBadge}</div>`
+      : (statusBadge
+        ? `<div class="tree-label"><span class="label-strong">${fallbackLabel}</span>${statusBadge}</div>`
+        : `<span class="label-strong">${fallbackLabel}</span>`);
 
     const qtyFull = fmtINT.format(Math.round(node.qtd || 0));
     const qtyDisplay = formatIntReadable(node.qtd || 0);
@@ -4322,24 +4422,31 @@ function renderTreeTable() {
     tbody.appendChild(tr);
 
     if (hasDetails){
-      detailTr=document.createElement("tr");
-      detailTr.className="tree-row tree-detail-row";
-      detailTr.dataset.detailParent=id;
-      detailTr.style.display="none";
-      detailTr.innerHTML=`<td colspan="8">${buildDetailTableHTML(node.detailGroups)}</td>`;
-      tbody.appendChild(detailTr);
-
-      tr.addEventListener("click", (ev)=>{
-        if (ev.target.closest('.toggle') || ev.target.closest('.icon-btn')) return;
-        const open = detailTr.style.display === "table-row";
-        if (open){
-          detailTr.style.display="none";
-          tr.classList.remove("is-detail-open");
-        } else {
-          detailTr.style.display="table-row";
-          tr.classList.add("is-detail-open");
+      const detailHTML = buildDetailTableHTML(node);
+      if (detailHTML){
+        detailTr=document.createElement("tr");
+        detailTr.className="tree-row tree-detail-row";
+        detailTr.dataset.detailParent=id;
+        detailTr.style.display="none";
+        if (isCancelled) {
+          detailTr.classList.add("is-cancelled-detail");
+          detailTr.dataset.cancelled = "1";
         }
-      });
+        detailTr.innerHTML=`<td colspan="8">${detailHTML}</td>`;
+        tbody.appendChild(detailTr);
+
+        tr.addEventListener("click", (ev)=>{
+          if (ev.target.closest('.toggle') || ev.target.closest('.icon-btn')) return;
+          const open = detailTr.style.display === "table-row";
+          if (open){
+            detailTr.style.display="none";
+            tr.classList.remove("is-detail-open");
+          } else {
+            detailTr.style.display="table-row";
+            tr.classList.add("is-detail-open");
+          }
+        });
+      }
     }
 
     if(has){

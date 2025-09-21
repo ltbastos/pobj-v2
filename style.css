@@ -824,6 +824,15 @@ select.input{
 .toggle[disabled]{ opacity:.45; cursor:default; }
 .tree-table .label-strong{ font-weight:800; color:#111827; line-height:1.25; }
 .tree-label{ display:flex; flex-direction:column; gap:4px; }
+.tree-status{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; background:#e2e8f0; font-size:11px; font-weight:700; color:#1f2937; width:max-content; }
+.tree-status i{ font-size:14px; line-height:1; }
+.tree-status--cancelled{ background:rgba(248,113,113,.18); color:#b91c1c; }
+.tree-row.is-cancelled{ background:#fff5f5; }
+.tree-row.is-cancelled:hover{ background:#fee2e2; }
+.tree-row.is-cancelled .label-strong{ color:#b91c1c; }
+.tree-row.is-cancelled .tree-status{ box-shadow:0 0 0 1px rgba(248,113,113,.32); }
+.tree-row.is-cancelled.is-detail-open{ background:#fee2e2; }
+
 
 .tree-detail{
   display:flex;
@@ -853,6 +862,7 @@ select.input{
   padding:14px 18px;
   border-bottom:1px solid #e5e7eb;
 }
+.tree-row.tree-detail-row.is-cancelled-detail td{ background:#fff1f2; }
 .tree-row.tree-detail-row:last-of-type td{ border-bottom:none; }
 .tree-detail-wrapper{
   background:#ffffff;
@@ -861,6 +871,10 @@ select.input{
   padding:12px;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.4);
 }
+.tree-detail__alert{ display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:10px; background:#fff1f2; color:#b91c1c; margin-bottom:12px; font-size:13px; font-weight:600; }
+.tree-detail__alert i{ font-size:18px; line-height:1; margin-top:1px; }
+.tree-detail__alert strong{ display:block; font-size:13px; color:#991b1b; }
+.tree-detail__alert span{ display:block; margin-top:2px; font-size:12px; color:#b91c1c; }
 .detail-table{ width:100%; border-collapse:collapse; font-size:12px; }
 .detail-table thead th{
   text-align:center;
@@ -1340,8 +1354,9 @@ select.input{
 .camp-ranking-table .regional-col{ font-weight:700; }
 
 .indicator-bar{ display:flex; align-items:center; gap:10px; }
-.indicator-bar__track{ flex:1; height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; }
-.indicator-bar__track span{ display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg, #2563eb, #38bdf8); }
+.indicator-bar__track{ position:relative; flex:1; height:6px; border-radius:999px; background:#e5e7eb; overflow:hidden; --bar-anim-duration:.55s; }
+.indicator-bar__track span{ position:absolute; left:0; top:0; bottom:0; width:var(--target, 0%); border-radius:inherit; background:linear-gradient(90deg, #2563eb, #38bdf8); transform-origin:left center; transform:scaleX(1); }
+.indicator-bar__track.is-animating span{ animation:bar-fill-grow var(--bar-anim-duration, .55s) cubic-bezier(0.25,0.9,0.3,1.2) forwards; }
 .indicator-bar__value{ min-width:58px; text-align:right; font-weight:700; }
 .indicator-bar__points{ font-size:11px; color:#64748b; font-weight:600; }
 
