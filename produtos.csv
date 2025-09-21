@@ -1,0 +1,18 @@
+Familia de produtos,id familia,produto,id produto,subproduto,id subproduto
+CAPTAÇÃO,captacao,Captação Bruta,captacao_bruta,Aplicação,aplicacao
+CAPTAÇÃO,captacao,Captação Líquida,captacao_liquida,Resgate,resgate
+CAPTAÇÃO,captacao,Portabilidade de Previdência Privada,portab_prev,Total,total
+CAPTAÇÃO,captacao,Centralização de Caixa,centralizacao,Parcelado,parcelado
+FINANCEIRO,financeiro,Recuperação de Vencidos até 59 dias,rec_vencidos_59,Total,total
+FINANCEIRO,financeiro,Recuperação de Vencidos acima de 50 dias,rec_vencidos_50mais,Total,total
+FINANCEIRO,financeiro,Recuperação de Crédito,rec_credito,À vista,avista
+CRÉDITO,credito,Produção de Crédito PJ,prod_credito_pj,À vista,avista
+CRÉDITO,credito,Limite Rotativo PJ (Volume),rotativo_pj_vol,Aplicação,aplicacao
+CRÉDITO,credito,Limite Rotativo PJ (Quantidade),rotativo_pj_qtd,Resgate,resgate
+LIGADAS,ligadas,Cartões,cartoes,À vista,avista
+LIGADAS,ligadas,Consórcios,consorcios,Parcelado,parcelado
+LIGADAS,ligadas,Seguros,seguros,Aplicação,aplicacao
+PRODUTIVIDADE,produtividade,Sucesso de Equipe Crédito,sucesso_equipe_credito,Total,total
+CLIENTES,clientes,Conquista Qualificada Gerenciado PJ,conquista_qualif_pj,Total,total
+CLIENTES,clientes,Conquista de Clientes Folha de Pagamento,conquista_folha,Total,total
+CLIENTES,clientes,Bradesco Expresso,bradesco_expresso,Resgate,resgate

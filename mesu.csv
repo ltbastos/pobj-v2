@@ -1,0 +1,6 @@
+Segmento,Id Segmento,Diretoria Regional,ID Diretoria,Gerencia Regional,Id Gerencia Regional,Agencia,Id Agencia,Gerente de Gestao,Id Gerente de Gestao,Gerente,Id Gerente
+Negócios,SEG_NEG,Norte & Nordeste,DR 01,Regional Fortaleza,GR 01,Agência 1001 • Fortaleza Centro,Ag 1001,Gerente geral 01,GG 01,Ana Lima,Gerente 1
+Empresas,SEG_EMP,Norte & Nordeste,DR 01,Regional Recife,GR 02,Agência 1002 • Recife Boa Vista,Ag 1002,Gerente geral 02,GG 02,Paulo Nunes,Gerente 2
+Empresas,SEG_EMP,Sudeste,DR 02,Regional São Paulo,GR 03,Agência 1004 • Avenida Paulista,Ag 1004,Gerente geral 03,GG 03,Juliana Prado,Gerente 3
+Negócios,SEG_NEG,Sudeste,DR 02,Regional São Paulo,GR 03,Agência 1004 • Avenida Paulista,Ag 1004,Gerente geral 03,GG 03,Bruno Garcia,Gerente 4
+MEI,SEG_MEI,Sul & Centro-Oeste,DR 03,Regional Curitiba,GR 04,Agência 1003 • Curitiba Batel,Ag 1003,Gerente geral 02,GG 02,Carla Menezes,Gerente 5
