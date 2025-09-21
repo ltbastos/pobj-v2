@@ -194,31 +194,71 @@ const SCRIPT_BASE_URL = (() => {
 })();
 
 const PAGE_BASE_URL = new URL('.', window.location.href).href;
+const PAGE_PATH_DEPTH = (() => {
+  try {
+    const path = new URL(PAGE_BASE_URL).pathname || '/';
+    return path.split('/').filter(Boolean).length;
+  } catch (err) {
+    const fallback = (window.location.pathname || '/').replace(/[^/]*$/, '');
+    return fallback.split('/').filter(Boolean).length;
+  }
+})();
 
 function buildCsvUrlAttempts(path){
   if (!path) return [];
   if (/^(?:https?|data|blob):/i.test(path)) {
     return [path];
   }
-  const clean = String(path).replace(/^\.\//, '').replace(/^\/+/, '');
-  const attempts = [];
-  try {
-    attempts.push(new URL(clean, SCRIPT_BASE_URL).href);
-  } catch (err) {
-    // ignore
+
+  const raw = String(path);
+  const clean = raw.replace(/^\.\//, '').replace(/^\/+/, '');
+  const baseLess = clean.replace(/^Base\//i, '');
+  const filename = clean.split('/').filter(Boolean).pop() || '';
+
+  const variants = new Set([raw, clean]);
+  if (clean && !clean.startsWith('./')) variants.add(`./${clean}`);
+  if (clean && !clean.startsWith('/')) variants.add(`/${clean}`);
+  if (baseLess && baseLess !== clean) {
+    variants.add(baseLess);
+    variants.add(`./${baseLess}`);
+    variants.add(`/${baseLess}`);
+  } else if (clean && !/^Base\//i.test(clean)) {
+    variants.add(`Base/${clean}`);
   }
-  try {
-    attempts.push(new URL(clean, PAGE_BASE_URL).href);
-  } catch (err) {
-    // ignore
+  if (filename) variants.add(filename);
+
+  for (let i = 1; i <= Math.min(5, PAGE_PATH_DEPTH); i += 1) {
+    const prefix = '../'.repeat(i);
+    variants.add(`${prefix}${clean}`);
+    if (baseLess && baseLess !== clean) {
+      variants.add(`${prefix}${baseLess}`);
+    }
   }
-  try {
-    attempts.push(new URL(`/${clean}`, window.location.origin).href);
-  } catch (err) {
-    // ignore
+
+  const attempts = new Set();
+  const bases = [SCRIPT_BASE_URL, PAGE_BASE_URL];
+  const origin = window.location.origin || '';
+  if (origin) {
+    bases.push(origin.endsWith('/') ? origin : `${origin}/`);
   }
-  attempts.push(path);
-  return [...new Set(attempts)];
+
+  variants.forEach(candidate => {
+    if (!candidate) return;
+    const normalized = candidate.startsWith('./') ? candidate.slice(2) : candidate;
+    bases.forEach(base => {
+      if (!base) return;
+      try {
+        attempts.add(new URL(normalized, base).href);
+      } catch (err) {
+        // ignore
+      }
+    });
+    if (!/^(?:https?|data|blob):/i.test(candidate)) {
+      attempts.add(candidate);
+    }
+  });
+
+  return [...attempts];
 }
 
 async function loadCsvFile(path){
@@ -237,7 +277,12 @@ async function loadCsvFile(path){
       lastError = err;
     }
   }
-  console.error(`Falha ao carregar CSV em ${path}`, lastError || new Error(`Tentativas: ${attempts.join(', ')}`));
+  const attemptList = attempts.join(', ');
+  if (lastError) {
+    console.error(`Falha ao carregar CSV em ${path}. Tentativas: ${attemptList}`, lastError);
+  } else {
+    console.error(`Falha ao carregar CSV em ${path}. Tentativas: ${attemptList}`);
+  }
   return [];
 }
 
