@@ -2584,12 +2584,9 @@ function ensureExecStyles(){
     .chart svg{display:block;width:100%;height:auto}
     .chart-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
     .legend-item{display:inline-flex;align-items:center;gap:6px;color:#475569;font-weight:700}
-    .legend-swatch{width:14px;height:6px;border-radius:999px;background:#cbd5e1;border:1px solid #94a3b8}
-    .legend-swatch--meta{background:#93c5fd;border-color:#60a5fa}
-    .legend-swatch--real{background:#86efac;border-color:#4ade80}
-    .legend-swatch--monthly-meta{background:transparent;border:1.5px dashed #2563eb;height:8px}
-    .legend-swatch--monthly-real{background:#2563eb;border-color:#1d4ed8;height:8px}
-    .legend-swatch--bars{background:#e5e7eb;border-color:#cbd5e1;height:10px}
+    .legend-swatch{display:inline-block;width:14px;height:6px;border-radius:999px;background:#cbd5e1;border:1px solid #94a3b8;position:relative}
+    .legend-swatch--bar-real{background:#2563eb;border-color:#1d4ed8;height:10px}
+    .legend-swatch--meta-line{background:transparent;border:none;height:0;border-top:2.5px solid #60a5fa;width:18px;margin-top:4px;border-radius:0}
     .exec-panel .exec-h{display:flex;align-items:center;justify-content:space-between;gap:10px}
   `;
   document.head.appendChild(s);
@@ -2717,12 +2714,8 @@ function makeDailySeries(totalMeta, totalReal, startISO, endISO){
   const dailyReal = days.map(()=>0);
   bizIdx.forEach((idx,i)=>{ dailyReal[idx] = totalReal * rnd[i]; });
 
-  const cum = (arr)=> arr.reduce((acc,v,i)=> (acc[i] = (i?acc[i-1]:0)+v, acc), []);
-  const cumMeta = cum(dailyMeta);
-  const cumReal = cum(dailyReal);
-
   const labels = days.map(d=> String(d.getUTCDate()).padStart(2,"0"));
-  return { labels, dailyReal, cumMeta, cumReal };
+  return { labels, dailyReal, dailyMeta };
 }
 
 function chartDimensions(container, fallbackW=900, fallbackH=260){
@@ -2740,16 +2733,17 @@ function buildExecChart(container, series){
   const ih = Math.max(0, H - m.t - m.b);
 
   const n = series.labels.length;
-  const maxY = Math.max(...series.cumMeta, ...series.cumReal) * 1.10 || 1;
+  const values = [...series.dailyMeta, ...series.dailyReal];
+  const maxVal = values.length ? Math.max(...values) : 0;
+  const maxY = (maxVal || 1) * 1.05;
 
   const x = i => m.l + (iw / Math.max(1,n-1)) * i;
   const y = v => m.t + ih - (v / maxY) * ih;
 
-  const barW = Math.max(2, iw / (n*1.6));
+  const barW = Math.max(4, iw / Math.max(1, n * 1.6));
 
   const axisY = H - m.b;
 
-  // grid Y
   const gy = [];
   for(let k=0;k<=4;k++){
     const val = (maxY/4)*k;
@@ -2757,29 +2751,29 @@ function buildExecChart(container, series){
   }
 
   const path = (arr)=> arr.map((v,i)=> `${i?"L":"M"} ${x(i)} ${y(v)}`).join(" ");
-  const bars = series.dailyReal.map((v,i)=> 
-    `<rect x="${x(i)-barW/2}" y="${y(v)}" width="${barW}" height="${Math.max(0, y(0)-y(v))}" fill="#e5e7eb" stroke="#cbd5e1"/>`
+  const bars = series.dailyReal.map((v,i)=>
+    `<rect x="${x(i)-barW/2}" y="${y(v)}" width="${barW}" height="${Math.max(0, y(0)-y(v))}" fill="#2563eb" fill-opacity="0.7" stroke="#1d4ed8" stroke-width="1.4" rx="2"/>`
   ).join("");
 
-  const lineReal = `<path d="${path(series.cumReal)}" fill="none" stroke="#22c55e" stroke-width="2.5" />`;
-  const lineMeta = `<path d="${path(series.cumMeta)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-dasharray="6 6" />`;
+  const lineMeta = `<path d="${path(series.dailyMeta)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+  const metaPoints = series.dailyMeta.map((v,i)=> `<circle cx="${x(i)}" cy="${y(v)}" r="2.6" fill="#2563eb" stroke="#fff" stroke-width="1"/>`).join("");
 
   const xlabels = series.labels.map((lab,i) =>
     `<text x="${x(i)}" y="${axisY + 16}" font-size="9" text-anchor="middle" fill="#6b7280">${lab}</text>`
   ).join("");
 
-  const gridY = gy.map(g => 
+  const gridY = gy.map(g =>
     `<line x1="${m.l}" y1="${g.y}" x2="${W-m.r}" y2="${g.y}" stroke="#eef2f7"/>
      <text x="${m.l-6}" y="${g.y+3}" font-size="10" text-anchor="end" fill="#6b7280">${g.label}</text>`
   ).join("");
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="barras diárias e linhas de meta e realizado">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Barras diárias de realizado com linha de meta">
       <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
       ${gridY}
       ${bars}
       ${lineMeta}
-      ${lineReal}
+      ${metaPoints}
       <line x1="${m.l}" y1="${axisY}" x2="${W-m.r}" y2="${axisY}" stroke="#e5e7eb"/>
       ${xlabels}
     </svg>`;
@@ -2905,29 +2899,36 @@ function makeMonthlySeries(rows, period){
 
 function buildExecMonthlyChart(container, series){
   const { width: W, height: H } = chartDimensions(container);
-  const m = { t:20, r:20, b:42, l:64 };
+  const m = { t:20, r:24, b:44, l:64 };
   const iw = Math.max(0, W - m.l - m.r);
   const ih = Math.max(0, H - m.t - m.b);
-  const maxY = Math.max(...series.meta, ...series.real) * 1.1 || 1;
+  const values = [...series.meta, ...series.real];
+  const maxVal = values.length ? Math.max(...values) : 0;
+  const maxY = (maxVal || 1) * 1.05;
   const n = series.labels.length;
   const band = iw / Math.max(1, n);
   const gap = Math.min(18, band * 0.25);
   const barW = Math.max(18, band - gap);
-  const realW = Math.max(10, barW * 0.6);
-  const offset = (barW - realW) / 2;
 
-  const xBase = i => m.l + band * i + gap/2;
+  const xCenter = i => m.l + band * i + band/2;
+  const xBar = i => xCenter(i) - barW/2;
   const y = v => m.t + ih - (v / maxY) * ih;
-
   const baseColor = "#2563eb";
-  const barsMeta = series.meta.map((v,i)=> {
-    const height = Math.max(0, y(0) - y(v));
-    return `<rect x="${xBase(i)}" y="${y(v)}" width="${barW}" height="${height}" fill="none" stroke="${baseColor}" stroke-width="1.6" stroke-dasharray="4 3" stroke-opacity="0.7" rx="2"/>`;
-  }).join("");
+
   const barsReal = series.real.map((v,i)=> {
     const height = Math.max(0, y(0) - y(v));
-    return `<rect x="${xBase(i)+offset}" y="${y(v)}" width="${realW}" height="${height}" fill="${baseColor}" fill-opacity="0.7" stroke="${baseColor}" stroke-width="1.4" rx="2"/>`;
+    return `<rect x="${xBar(i)}" y="${y(v)}" width="${barW}" height="${height}" fill="${baseColor}" fill-opacity="0.75" rx="4"/>`;
   }).join("");
+
+  const barLabels = series.real.map((v,i)=> {
+    const text = formatBRLReadable(v);
+    const pos = Math.max(m.t + 12, y(v) - 6);
+    return `<text x="${xCenter(i)}" y="${pos}" font-size="10" font-weight="700" text-anchor="middle" fill="#1f2937">${text}</text>`;
+  }).join("");
+
+  const path = (arr)=> arr.map((v,i)=> `${i?"L":"M"} ${xCenter(i)} ${y(v)}`).join(" ");
+  const metaLine = `<path d="${path(series.meta)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+  const metaPoints = series.meta.map((v,i)=> `<circle cx="${xCenter(i)}" cy="${y(v)}" r="3" fill="#2563eb" stroke="#fff" stroke-width="1"/>`).join("");
 
   const gy = [];
   for(let k=0;k<=4;k++){
@@ -2940,17 +2941,16 @@ function buildExecMonthlyChart(container, series){
      <text x="${m.l-6}" y="${g.y+3}" font-size="10" text-anchor="end" fill="#6b7280">${g.label}</text>`
   ).join("");
 
-  const xlabels = series.labels.map((lab,i)=> {
-    const cx = m.l + band * i + band/2;
-    return `<text x="${cx}" y="${H-6}" font-size="10" text-anchor="middle" fill="#6b7280">${lab}</text>`;
-  }).join("");
+  const xlabels = series.labels.map((lab,i)=> `<text x="${xCenter(i)}" y="${H-8}" font-size="10" text-anchor="middle" fill="#6b7280">${lab}</text>`).join("");
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="barras mensais de meta e realizado">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Barras mensais de realizado com linha de meta">
       <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
       ${gridY}
-      ${barsMeta}
       ${barsReal}
+      ${metaLine}
+      ${metaPoints}
+      ${barLabels}
       <line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" stroke="#e5e7eb"/>
       ${xlabels}
     </svg>`;
@@ -3069,24 +3069,23 @@ function renderExecutiveView(){
       if (mode === "mensal"){
         const monthlySeries = makeMonthlySeries(rowsBase, state.period);
         buildExecMonthlyChart(chartC, monthlySeries);
-        chartC.setAttribute("aria-label", "Comparativo mensal de meta e realizado em barras azuis");
+        chartC.setAttribute("aria-label", "Barras mensais de realizado com linha de meta");
         if (chartTitleEl) chartTitleEl.textContent = "Evolução mensal";
         if (chartLegend){
           chartLegend.innerHTML = `
-            <span class="legend-item"><span class="legend-swatch legend-swatch--monthly-meta"></span>Meta mensal (contorno)</span>
-            <span class="legend-item"><span class="legend-swatch legend-swatch--monthly-real"></span>Realizado mensal (barra)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--bar-real"></span>Realizado mensal (barra)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--meta-line"></span>Meta mensal (linha)</span>
           `;
         }
       } else {
         const dailySeries = makeDailySeries(total.meta_mens, total.real_mens, state.period.start, state.period.end);
         buildExecChart(chartC, dailySeries);
-        chartC.setAttribute("aria-label", "Evolução diária com linhas de meta e realizado");
+        chartC.setAttribute("aria-label", "Barras diárias de realizado com linha de meta");
         if (chartTitleEl) chartTitleEl.textContent = "Evolução do mês";
         if (chartLegend){
           chartLegend.innerHTML = `
-            <span class="legend-item"><span class="legend-swatch legend-swatch--bars"></span>Diário realizado (barras)</span>
-            <span class="legend-item"><span class="legend-swatch legend-swatch--real"></span>Realizado acumulado (linha)</span>
-            <span class="legend-item"><span class="legend-swatch legend-swatch--meta"></span>Meta acumulada (linha)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--bar-real"></span>Realizado diário (barra)</span>
+            <span class="legend-item"><span class="legend-swatch legend-swatch--meta-line"></span>Meta diária (linha)</span>
           `;
         }
       }
