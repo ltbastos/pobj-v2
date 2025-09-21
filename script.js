@@ -22,9 +22,9 @@ const $$ = (s) => document.querySelectorAll(s);
 const fmtBRL = new Intl.NumberFormat("pt-BR", { style:"currency", currency:"BRL" });
 const fmtINT = new Intl.NumberFormat("pt-BR");
 const fmtONE = new Intl.NumberFormat("pt-BR", { minimumFractionDigits:1, maximumFractionDigits:1 });
-const EXEC_BAR_FILL = "#60a5fa";
-const EXEC_BAR_STROKE = "#3b82f6";
-const EXEC_META_COLOR = "#ef4444";
+const EXEC_BAR_FILL = "#93c5fd";
+const EXEC_BAR_STROKE = "#60a5fa";
+const EXEC_META_COLOR = "#fca5a5";
 const setActiveTab = (viewId = "cards") => {
   const tabs = Array.from($$(".tab"));
   const target = tabs.some(tab => (tab.dataset.view || "") === viewId) ? viewId : "cards";
@@ -2768,7 +2768,7 @@ function buildExecChart(container, series){
     const height = Math.max(0, y(0) - y(v));
     const day = series.labels?.[i] || String(i + 1).padStart(2, "0");
     const valueLabel = formatBRLReadable(v);
-    return `<rect x="${x(i)-barW/2}" y="${y(v)}" width="${barW}" height="${height}" fill="${EXEC_BAR_FILL}" stroke="${EXEC_BAR_STROKE}" stroke-width="1.2" rx="3"><title>Realizado dia ${day}: ${valueLabel}</title></rect>`;
+    return `<rect class="exec-bar" style="--index:${i}" x="${x(i)-barW/2}" y="${y(v)}" width="${barW}" height="${height}" fill="${EXEC_BAR_FILL}" stroke="${EXEC_BAR_STROKE}" stroke-width="1.2" rx="3"><title>Realizado dia ${day}: ${valueLabel}</title></rect>`;
   }).join("");
 
   const barLabels = series.dailyReal.map((v,i)=> {
@@ -2778,11 +2778,11 @@ function buildExecChart(container, series){
     return `<text x="${x(i)}" y="${ty}" font-size="10" font-weight="700" text-anchor="middle" fill="#1f2937">${text}</text>`;
   }).join("");
 
-  const lineMeta = `<path d="${path(series.dailyMeta)}" fill="none" stroke="${EXEC_META_COLOR}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 3" />`;
+  const lineMeta = `<path class="exec-meta-line" d="${path(series.dailyMeta)}" fill="none" stroke="${EXEC_META_COLOR}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 3" />`;
   const metaPoints = series.dailyMeta.map((v,i)=> {
     const day = series.labels?.[i] || String(i + 1).padStart(2, "0");
     const valueLabel = formatBRLReadable(v);
-    return `<circle cx="${x(i)}" cy="${y(v)}" r="2.8" fill="${EXEC_META_COLOR}" stroke="#fff" stroke-width="1.2"><title>Meta dia ${day}: ${valueLabel}</title></circle>`;
+    return `<circle class="exec-meta-point" style="--index:${i}" cx="${x(i)}" cy="${y(v)}" r="2.8" fill="${EXEC_META_COLOR}" stroke="#fff" stroke-width="1.2"><title>Meta dia ${day}: ${valueLabel}</title></circle>`;
   }).join("");
 
   const xlabels = series.labels.map((lab,i) =>
@@ -2795,7 +2795,7 @@ function buildExecChart(container, series){
   ).join("");
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Barras diárias de realizado com linha de meta">
+    <svg class="exec-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Barras diárias de realizado com linha de meta">
       <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
       ${gridY}
       ${bars}
@@ -2946,7 +2946,7 @@ function buildExecMonthlyChart(container, series){
   const barsReal = series.real.map((v,i)=> {
     const height = Math.max(0, y(0) - y(v));
     const label = formatBRLReadable(v);
-    return `<rect x="${xBar(i)}" y="${y(v)}" width="${barW}" height="${height}" fill="${baseColor}" stroke="${EXEC_BAR_STROKE}" stroke-width="1.2" rx="4"><title>Realizado mês ${series.labels?.[i] || i + 1}: ${label}</title></rect>`;
+    return `<rect class="exec-bar" style="--index:${i}" x="${xBar(i)}" y="${y(v)}" width="${barW}" height="${height}" fill="${baseColor}" stroke="${EXEC_BAR_STROKE}" stroke-width="1.2" rx="4"><title>Realizado mês ${series.labels?.[i] || i + 1}: ${label}</title></rect>`;
   }).join("");
 
   const barLabels = series.real.map((v,i)=> {
@@ -2956,10 +2956,10 @@ function buildExecMonthlyChart(container, series){
   }).join("");
 
   const path = (arr)=> arr.map((v,i)=> `${i?"L":"M"} ${xCenter(i)} ${y(v)}`).join(" ");
-  const metaLine = `<path d="${path(series.meta)}" fill="none" stroke="${EXEC_META_COLOR}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 3" />`;
+  const metaLine = `<path class="exec-meta-line" d="${path(series.meta)}" fill="none" stroke="${EXEC_META_COLOR}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 3" />`;
   const metaPoints = series.meta.map((v,i)=> {
     const label = formatBRLReadable(v);
-    return `<circle cx="${xCenter(i)}" cy="${y(v)}" r="3" fill="${EXEC_META_COLOR}" stroke="#fff" stroke-width="1.2"><title>Meta mês ${series.labels?.[i] || i + 1}: ${label}</title></circle>`;
+    return `<circle class="exec-meta-point" style="--index:${i}" cx="${xCenter(i)}" cy="${y(v)}" r="3" fill="${EXEC_META_COLOR}" stroke="#fff" stroke-width="1.2"><title>Meta mês ${series.labels?.[i] || i + 1}: ${label}</title></circle>`;
   }).join("");
 
   const gy = [];
@@ -2976,7 +2976,7 @@ function buildExecMonthlyChart(container, series){
   const xlabels = series.labels.map((lab,i)=> `<text x="${xCenter(i)}" y="${H-8}" font-size="10" text-anchor="middle" fill="#6b7280">${lab}</text>`).join("");
 
   container.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Barras mensais de realizado com linha de meta">
+    <svg class="exec-chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Barras mensais de realizado com linha de meta">
       <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
       ${gridY}
       ${barsReal}

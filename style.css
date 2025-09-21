@@ -991,6 +991,48 @@ select.input{
   background:#fff;
   box-sizing:border-box;
 }
+.exec-chart .chart svg{
+  opacity:0;
+  transform:translateY(16px);
+  animation:exec-chart-in 0.6s ease-out forwards;
+}
+.exec-chart .chart .exec-bar{
+  transform-box:fill-box;
+  transform-origin:bottom center;
+  transform:scaleY(0);
+  animation:exec-bar-grow 0.75s cubic-bezier(0.25,0.9,0.3,1.2) forwards;
+  animation-delay:calc(0.04s * var(--index, 0));
+}
+.exec-chart .chart .exec-meta-line{
+  opacity:0;
+  transform:translateY(8px);
+  animation:exec-line-fade 0.6s ease-out forwards;
+  animation-delay:0.25s;
+}
+.exec-chart .chart .exec-meta-point{
+  opacity:0;
+  transform-origin:center;
+  transform:scale(0.6);
+  animation:exec-point-pop 0.35s ease-out forwards;
+  animation-delay:calc(0.05s * var(--index, 0) + 0.3s);
+}
+
+@keyframes exec-chart-in{
+  from{opacity:0;transform:translateY(16px);}
+  to{opacity:1;transform:translateY(0);}
+}
+@keyframes exec-bar-grow{
+  from{transform:scaleY(0);}
+  to{transform:scaleY(1);}
+}
+@keyframes exec-line-fade{
+  from{opacity:0;transform:translateY(8px);}
+  to{opacity:1;transform:translateY(0);}
+}
+@keyframes exec-point-pop{
+  from{opacity:0;transform:scale(0.6);}
+  to{opacity:1;transform:scale(1);}
+}
 .exec-span-2{ grid-column: 1 / -1; }
 .exec-h{ margin:0 0 10px; font-size:14px; color:#374151; }
 
